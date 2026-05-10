@@ -75,10 +75,20 @@ type SetStmt struct {
 }
 
 type Value struct {
-	String *string  `@String`
-	Number *float64 `| @Number`
-	Bool   *bool    `| @Bool`
-	Expr   *string  `| "$(" @String ")"`
+	String *string   `@String`
+	Number *float64  `| @Number`
+	Bool   *bool     `| @Bool`
+	Expr   *string   `| "$(" @CodeValue ")"`
+	Object *MapValue `| "{" @@ "}"`
+}
+
+type MapValue struct {
+	Entries []*MapEntry `(@@ (","? @@)*)?`
+}
+
+type MapEntry struct {
+	Key   string `@Ident ":"`
+	Value *Value `@@`
 }
 
 type ComponentsBlock struct {
@@ -168,7 +178,7 @@ type TypeBase struct {
 	Array  *TypeExpr    `| "[" @@ "]"`
 	Object *ObjectBody  `| @@`
 	Ref    *string      `| "$" @Ident`
-	Enum   []string     `| (@Ident ("|" @Ident)* | @String ("|" @String)*)`
+	Enum   []string     `| (@(Ident|String) ("|" @(Ident|String))* )`
 }
 
 type ObjectBody struct {

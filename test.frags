@@ -21,7 +21,9 @@ session("gather") {
 
     call("searchDocuments") -> rawDocs {
         query   = "{{ .params.topic }}"
-        limit   = 10
+        limit   = { 
+            foo: "bar"
+        }
         code(
             args.query.split(' ').join('+')
         )

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"unicode"
@@ -39,30 +40,28 @@ func (d *fragsLexerDefinition) Symbols() map[string]lexer.TokenType {
 	}
 }
 
-// fragsLexer is a stateful lexer that handles indentation-sensitive prompt blocks
-// and balanced-parentheses code segments.
+// fragsLexer is a stateful lexer that handles indentation-sensitive prompt blocks,
+// balanced-parentheses code segments, and robust error detection.
 type fragsLexer struct {
 	s                  string
 	pos                lexer.Position
-	expectingAttrValue bool   // Set when encountering '=' after after/expect/iterate
-	expectingCode      bool   // Set when encountering 'code('
-	lastIdent          string // Tracks the last identifier to contextually trigger special states
+	expectingAttrValue bool
+	expectingCode      bool
+	lastIdent          string
 }
 
 func (l *fragsLexer) Next() (lexer.Token, error) {
 	for {
-		// Prompt items are detected at the start of a line to capture their specific indentation.
 		if l.pos.Column == 1 {
 			i := 0
 			for i < len(l.s) && (l.s[i] == ' ' || l.s[i] == '\t') {
 				i++
 			}
-			// Check for dash line marker '- '
 			if i < len(l.s) && l.s[i] == '-' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r') {
-				return l.consumePromptItem(i), nil
+				t, err := l.consumePromptItem(i)
+				return t, err
 			}
 			
-			// Leading comments are captured as 'Comment' to associate them with the following block/field.
 			if i < len(l.s) && l.s[i] == '#' {
 				l.s = l.s[i:]
 				l.pos.Column += i
@@ -70,7 +69,6 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			}
 		}
 
-		// Skip horizontal whitespace, updating column position accurately.
 		i := 0
 		for i < len(l.s) && (l.s[i] == ' ' || l.s[i] == '\t') {
 			i++
@@ -84,7 +82,6 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			return lexer.EOFToken(l.pos), nil
 		}
 
-		// Handle newlines, resetting column and context-sensitive states.
 		if l.s[0] == '\n' || l.s[0] == '\r' {
 			l.consumeNewline()
 			l.lastIdent = ""
@@ -93,8 +90,6 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		break
 	}
 
-	// AttrValue state: greedily consume until comma, paren, or newline.
-	// This captures raw expressions for after=, expect=, and iterate= attributes.
 	if l.expectingAttrValue {
 		l.expectingAttrValue = false
 		if l.s[0] != '"' {
@@ -109,10 +104,12 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		}
 	}
 
-	// CodeValue state: captures nested JavaScript within code(...) or expressions.
 	if l.expectingCode {
 		l.expectingCode = false
-		t := l.consumeBalanced('(', ')')
+		t, err := l.consumeBalanced('(', ')')
+		if err != nil {
+			return t, err
+		}
 		t.Type = -12 // CodeValue
 		return t, nil
 	}
@@ -123,23 +120,21 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		r := l.s[0]
 		switch {
 		case r == '#':
-			// Inline comments appear after other tokens on the same line.
 			t = l.consumeComment("InlineComment")
 		case r == '"':
-			t = l.consumeString()
+			t, err = l.consumeString()
 			l.lastIdent = ""
 		case unicode.IsDigit(rune(r)) || r == '-' || r == '+':
-			// Negative number check vs punctuation/direction indicator.
 			if r == '-' {
 				if strings.HasPrefix(l.s, "->") {
 					t = l.consume(2, "Punct")
 				} else if len(l.s) > 1 && unicode.IsDigit(rune(l.s[1])) {
-					t = l.consumeNumber()
+					t, err = l.consumeNumber()
 				} else {
 					t = l.consume(1, "Punct")
 				}
 			} else {
-				t = l.consumeNumber()
+				t, err = l.consumeNumber()
 			}
 			l.lastIdent = ""
 		case unicode.IsLetter(rune(r)) || r == '_':
@@ -151,10 +146,10 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				l.lastIdent = ""
 			} else if strings.HasPrefix(l.s, "$(") {
 				t = l.consume(2, "Punct")
+				l.expectingCode = true
 				l.lastIdent = ""
 			} else {
 				t = l.consume(1, "Punct")
-				// Detect attribute assignment and code block start
 				if t.Value == "=" {
 					if l.lastIdent == "expect" || l.lastIdent == "iterate" || l.lastIdent == "after" {
 						l.expectingAttrValue = true
@@ -169,16 +164,14 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				}
 			}
 		default:
-			t = l.consume(1, "Punct")
-			l.lastIdent = ""
+			return lexer.Token{}, fmt.Errorf("%s: illegal character %q", l.pos, r)
 		}
 	}
 
 	return t, err
 }
 
-// consumeBalanced captures text within balanced start/end runes, supporting nesting.
-func (l *fragsLexer) consumeBalanced(start, end rune) lexer.Token {
+func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 	depth := 1
 	i := 0
 	startPos := l.pos
@@ -194,6 +187,10 @@ func (l *fragsLexer) consumeBalanced(start, end rune) lexer.Token {
 			}
 		}
 		i++
+	}
+
+	if depth > 0 {
+		return lexer.Token{}, fmt.Errorf("%s: unclosed balanced block (missing %q)", startPos, end)
 	}
 	
 	val := l.s[:i]
@@ -211,7 +208,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) lexer.Token {
 		Type:  -7,
 		Value: val,
 		Pos:   startPos,
-	}
+	}, nil
 }
 
 func (l *fragsLexer) consumeNewline() {
@@ -261,31 +258,58 @@ func (l *fragsLexer) consumeComment(typ string) lexer.Token {
 	return l.consume(i, typ)
 }
 
-func (l *fragsLexer) consumeString() lexer.Token {
+func (l *fragsLexer) consumeString() (lexer.Token, error) {
+	startPos := l.pos
 	i := 1
 	for i < len(l.s) {
-		if l.s[i] == '\\' && i+1 < len(l.s) {
+		if l.s[i] == '\n' || l.s[i] == '\r' {
+			return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+		}
+		if l.s[i] == '\\' {
+			if i+1 >= len(l.s) {
+				return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+			}
+			esc := l.s[i+1]
+			if esc != '"' && esc != '\\' && esc != 'n' && esc != 'r' && esc != 't' {
+				return lexer.Token{}, fmt.Errorf("%s: invalid escape sequence \\%c", l.pos, esc)
+			}
 			i += 2
 			continue
 		}
 		if l.s[i] == '"' {
+			val := l.s[:i+1]
+			// Validate template tags {{ }} are balanced
+			if strings.Count(val, "{{") != strings.Count(val, "}}") {
+				return lexer.Token{}, fmt.Errorf("%s: malformed template tags in string", startPos)
+			}
 			i++
-			break
+			return l.consume(i, "String"), nil
 		}
 		i++
 	}
-	return l.consume(i, "String")
+	return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
 }
 
-func (l *fragsLexer) consumeNumber() lexer.Token {
+func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
+	startPos := l.pos
 	i := 0
 	if l.s[i] == '-' || l.s[i] == '+' {
 		i++
 	}
+	dots := 0
 	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.s[i] == '.') {
+		if l.s[i] == '.' {
+			dots++
+			if dots > 1 {
+				return lexer.Token{}, fmt.Errorf("%s: malformed number (multiple decimal points)", startPos)
+			}
+		}
 		i++
 	}
-	return l.consume(i, "Number")
+	if l.s[i-1] == '.' {
+		return lexer.Token{}, fmt.Errorf("%s: malformed number (trailing decimal point)", startPos)
+	}
+	return l.consume(i, "Number"), nil
 }
 
 func (l *fragsLexer) consumeIdent() lexer.Token {
@@ -300,8 +324,8 @@ func (l *fragsLexer) consumeIdent() lexer.Token {
 	return l.consume(i, "Ident")
 }
 
-// consumePromptItem handles multi-line prompt blocks with indentation-based continuation rules.
-func (l *fragsLexer) consumePromptItem(indent int) lexer.Token {
+func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
+	startPos := l.pos
 	dashCol := indent + 1
 	i := 0
 	for i < len(l.s) && l.s[i] != '\n' && l.s[i] != '\r' {
@@ -328,7 +352,6 @@ func (l *fragsLexer) consumePromptItem(indent int) lexer.Token {
 			k++
 		}
 		
-		// Continuation line must be indented strictly deeper than the '-' marker.
 		if j+k < len(l.s) && l.s[j+k] != '\n' && l.s[j+k] != '\r' && k > dashCol {
 			j += k
 			for j < len(l.s) && l.s[j] != '\n' && l.s[j] != '\r' {
@@ -341,6 +364,11 @@ func (l *fragsLexer) consumePromptItem(indent int) lexer.Token {
 	}
 
 	val := l.s[:totalLen]
+	// Validate template tags
+	if strings.Count(val, "{{") != strings.Count(val, "}}") {
+		return lexer.Token{}, fmt.Errorf("%s: malformed template tags in prompt item", startPos)
+	}
+
 	token := lexer.Token{
 		Type:  -9,
 		Value: val,
@@ -357,5 +385,5 @@ func (l *fragsLexer) consumePromptItem(indent int) lexer.Token {
 		}
 	}
 	
-	return token
+	return token, nil
 }

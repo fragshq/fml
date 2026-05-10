@@ -124,7 +124,7 @@ TransformerTrigger ← "on_function" | "on_input" | "on_resource"
 
 CallBlock    ← "call" "(" STRING_LIT ")" ("->" IDENTIFIER)? "{" CallField* "}"
 
-CallField    ← IDENTIFIER "=" LiteralValue NEWLINE
+CallField    ← IDENTIFIER "=" Value NEWLINE
              / CodeBlock
 
 CodeBlock    ← "code" "(" RawJS ")"
@@ -133,10 +133,7 @@ RawJS        ← ( [^()] / "(" RawJS ")" )*    # balanced parens, recursive
 
 # ── set ───────────────────────────────────────────────────────────────────────
 
-SetStmt      ← "set" IDENTIFIER "=" (ExprValue / LiteralValue) NEWLINE
-
-ExprValue    ← "$(" RawExpr ")"
-RawExpr      ← ( [^()] / "(" RawExpr ")" )*  # balanced parens, recursive
+SetStmt      ← "set" IDENTIFIER "=" Value NEWLINE
 
 # ── components ────────────────────────────────────────────────────────────────
 
@@ -224,7 +221,17 @@ EnumValue    ← STRING_LIT / IDENTIFIER               # "active"|"inactive" or 
 
 LeadingComment ← SP* "#" InlineText NEWLINE          # comment line above a field
 
+Value        ← LiteralValue
+             / ExprValue
+             / ObjectValue
+
 LiteralValue ← STRING_LIT | NUMBER_LIT | BOOL_LIT
+
+ExprValue    ← "$(" RawExpr ")"
+RawExpr      ← ( [^()] / "(" RawExpr ")" )*  # balanced parens, recursive
+
+ObjectValue  ← "{" (ObjectEntry (","? ObjectEntry)*)? "}"
+ObjectEntry  ← IDENTIFIER ":" Value
 ```
 
 ---
@@ -429,12 +436,19 @@ Declares session-level variables. Compiles to the session's `vars` map.
 ```
 set myVar = "hello"
 set count = $(params.items | length(@))
+set config = {
+    limit: 10,
+    debug: true
+}
 ```
 
 ```yaml
 vars:
   myVar: "hello"
   count: "$(params.items | length(@))"
+  config:
+    limit: 10
+    debug: true
 ```
 
 At plan level (outside any session), `set` compiles to the plan-level `vars` map.
@@ -764,7 +778,7 @@ call("label") -> myVar {
 | `call("name")` | `name: name` | Always present |
 | `-> varName` | `in: vars`, `var: varName` | When binding present |
 | no `->` | `in: ai` | No `var` field emitted |
-| key-value pairs | `args: {key: value}` | Omit `args` if empty |
+| key-value pairs | `args: {key: value}` | Omit `args` if empty. Support nested objects and `$(...)`. |
 | `code(...)` | `code: "..."` | JS expression; strip outer whitespace |
 
 When `code` is present, `name` acts as a label (not a tool reference). The `args` map

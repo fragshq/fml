@@ -318,17 +318,23 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			promptItems = append(promptItems, stmt.Prompt.Items...)
 		case stmt.Schema != nil:
 			if stmt.Schema.Type != nil {
+				// Check for conflict: if session already had fields
+				if current, ok := c.sessionSchemas[s.Name]; ok && len(current.Properties) > 0 {
+					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
+				}
 				c.sessionSchemas[s.Name] = c.compileType(stmt.Schema.Type)
 				c.sessionOptional[s.Name] = stmt.Schema.Type.Optional
 			} else {
+				// Refresh sessSchema in case it was replaced by anonymous type
+				sessSchema = c.sessionSchemas[s.Name]
+				if sessSchema.Properties == nil {
+					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
+				}
 				for _, field := range stmt.Schema.Fields {
 					fSchema := c.compileType(field.Type)
 					desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
 					if desc != "" { fSchema.Description = desc }
-					
-					if sessSchema.Properties == nil {
-						return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
-					}
+
 					if _, exists := sessSchema.Properties[field.Name]; exists {
 						return fmt.Errorf("field %q already defined in session %q", field.Name, s.Name)
 					}
@@ -338,6 +344,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 					}
 				}
 			}
+
 		}
 	}
 
@@ -522,6 +529,12 @@ func (c *Compiler) compileValue(v *parser.Value) interface{} {
 	case v.Number != nil: return *v.Number
 	case v.Bool != nil:   return *v.Bool
 	case v.Expr != nil:   return fmt.Sprintf("$(%s)", *v.Expr)
+	case v.Object != nil:
+		m := make(map[string]interface{})
+		for _, entry := range v.Object.Entries {
+			m[entry.Key] = c.compileValue(entry.Value)
+		}
+		return m
 	}
 	return nil
 }

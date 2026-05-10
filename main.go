@@ -1,136 +1,114 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"github.com/theirish/fml/compiler"
 	"github.com/theirish/fml/decompiler"
 	"github.com/theirish/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	outputPath string
+)
+
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	switch os.Args[1] {
-	case "compile":
-		runCompile(os.Args[2:])
-	case "decompile":
-		runDecompile(os.Args[2:])
-	case "help":
-		printUsage()
-	default:
-		fmt.Printf("Unknown command: %s\n", os.Args[1])
-		printUsage()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
 }
 
-func printUsage() {
-	fmt.Println("Usage: fml <command> [arguments]")
-	fmt.Println("\nCommands:")
-	fmt.Println("  compile    Compile .fml to .yaml")
-	fmt.Println("  decompile  Decompile .yaml to .fml")
-	fmt.Println("  help       Show this help message")
-	fmt.Println("\nUse 'fml <command> -help' for more information on a command.")
+var rootCmd = &cobra.Command{
+	Use:   "fml",
+	Short: "FML is a Domain Specific Language for Frags LLM plans",
+	Long: `FML (Frags Markup Language) is a compact, human-readable DSL 
+that compiles to structured Frags YAML plans for LLM pipelines.`,
 }
 
-func runCompile(args []string) {
-	fs := flag.NewFlagSet("compile", flag.ExitOnError)
-	outputPath := fs.String("o", "", "Path to the output .yaml file (emits to stdout if omitted)")
-	fs.Parse(args)
+func init() {
+	rootCmd.AddCommand(compileCmd)
+	rootCmd.AddCommand(decompileCmd)
 
-	if fs.NArg() < 1 {
-		fmt.Println("Usage: fml compile <input.fml> [-o <output.yaml>]")
-		os.Exit(1)
-	}
-	inputPath := fs.Arg(0)
+	compileCmd.Flags().StringVarP(&outputPath, "output", "o", "", "Path to the output .yaml file (emits to stdout if omitted)")
+	decompileCmd.Flags().StringVarP(&outputPath, "output", "o", "", "Path to the output .fml file (emits to stdout if omitted)")
+}
 
-	data, err := os.ReadFile(inputPath)
-	if err != nil {
-		fmt.Printf("Error reading input file: %v\n", err)
-		os.Exit(1)
-	}
-
-	p, err := parser.NewParser()
-	if err != nil {
-		fmt.Printf("Error initializing parser: %v\n", err)
-		os.Exit(1)
-	}
-
-	plan, err := p.ParseString(inputPath, string(data))
-	if err != nil {
-		fmt.Printf("Error parsing DSL: %v\n", err)
-		os.Exit(1)
-	}
-
-	c := compiler.New(plan)
-	out, err := c.Compile()
-	if err != nil {
-		fmt.Printf("Error during compilation: %v\n", err)
-		os.Exit(1)
-	}
-
-	outYAML, err := yaml.Marshal(out)
-	if err != nil {
-		fmt.Printf("Error marshaling to YAML: %v\n", err)
-		os.Exit(1)
-	}
-
-	if *outputPath != "" {
-		err = os.WriteFile(*outputPath, outYAML, 0644)
+var compileCmd = &cobra.Command{
+	Use:   "compile <input.fml>",
+	Short: "Compile an FML file to a Frags YAML plan",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		inputPath := args[0]
+		data, err := os.ReadFile(inputPath)
 		if err != nil {
-			fmt.Printf("Error writing output file: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading input file: %w", err)
 		}
-	} else {
-		fmt.Println(string(outYAML))
-	}
+
+		p, err := parser.NewParser()
+		if err != nil {
+			return fmt.Errorf("error initializing parser: %w", err)
+		}
+
+		plan, err := p.ParseString(inputPath, string(data))
+		if err != nil {
+			return fmt.Errorf("error parsing DSL: %w", err)
+		}
+
+		c := compiler.New(plan)
+		out, err := c.Compile()
+		if err != nil {
+			return fmt.Errorf("error during compilation: %w", err)
+		}
+
+		outYAML, err := yaml.Marshal(out)
+		if err != nil {
+			return fmt.Errorf("error marshaling to YAML: %w", err)
+		}
+
+		if outputPath != "" {
+			if err := os.WriteFile(outputPath, outYAML, 0644); err != nil {
+				return fmt.Errorf("error writing output file: %w", err)
+			}
+		} else {
+			fmt.Println(string(outYAML))
+		}
+		return nil
+	},
 }
 
-func runDecompile(args []string) {
-	fs := flag.NewFlagSet("decompile", flag.ExitOnError)
-	outputPath := fs.String("o", "", "Path to the output .fml file (emits to stdout if omitted)")
-	fs.Parse(args)
-
-	if fs.NArg() < 1 {
-		fmt.Println("Usage: fml decompile <input.yaml> [-o <output.fml>]")
-		os.Exit(1)
-	}
-	inputPath := fs.Arg(0)
-
-	data, err := os.ReadFile(inputPath)
-	if err != nil {
-		fmt.Printf("Error reading input file: %v\n", err)
-		os.Exit(1)
-	}
-
-	var planYAML compiler.PlanYAML
-	err = yaml.Unmarshal(data, &planYAML)
-	if err != nil {
-		fmt.Printf("Error unmarshaling YAML: %v\n", err)
-		os.Exit(1)
-	}
-
-	d := decompiler.New(&planYAML)
-	out, err := d.Decompile()
-	if err != nil {
-		fmt.Printf("Error during decompilation: %v\n", err)
-		os.Exit(1)
-	}
-
-	if *outputPath != "" {
-		err = os.WriteFile(*outputPath, []byte(out), 0644)
+var decompileCmd = &cobra.Command{
+	Use:   "decompile <input.yaml>",
+	Short: "Decompile a Frags YAML plan back to FML source",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		inputPath := args[0]
+		data, err := os.ReadFile(inputPath)
 		if err != nil {
-			fmt.Printf("Error writing output file: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error reading input file: %w", err)
 		}
-	} else {
-		fmt.Println(out)
-	}
+
+		var planYAML compiler.PlanYAML
+		if err := yaml.Unmarshal(data, &planYAML); err != nil {
+			return fmt.Errorf("error unmarshaling YAML: %w", err)
+		}
+
+		d := decompiler.New(&planYAML)
+		out, err := d.Decompile()
+		if err != nil {
+			return fmt.Errorf("error during decompilation: %w", err)
+		}
+
+		if outputPath != "" {
+			if err := os.WriteFile(outputPath, []byte(out), 0644); err != nil {
+				return fmt.Errorf("error writing output file: %w", err)
+			}
+		} else {
+			fmt.Println(out)
+		}
+		return nil
+	},
 }

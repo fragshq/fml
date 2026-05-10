@@ -122,7 +122,7 @@ TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
 # ── call (plan-level and session-level share the same syntax) ─────────────────
 
-CallBlock    ← "call" "(" STRING_LIT ")" ("->" IDENTIFIER)? "{" CallField* "}"
+CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? "{" CallField* "}"
 
 CallField    ← IDENTIFIER "=" Value NEWLINE
              / CodeBlock
@@ -348,7 +348,7 @@ Plan-level `call` blocks compile to the plan-level `preCalls` array. See §8.5 f
 full compilation rules shared with session-level calls.
 
 ```
-call("splitTags") -> tagList {
+call("splitTags") -> tagList:myVar {
     raw = "{{ .context.tagString }}"
     code(
         args.raw.split(',').map(t => t.trim())
@@ -754,7 +754,7 @@ header attributes.
 Applies equally to plan-level and session-level `call` blocks.
 
 ```
-call("label") -> myVar {
+call("label") -> namespace:myVar {
     param1 = "value"
     param2 = 42
     code(
@@ -769,7 +769,7 @@ call("label") -> myVar {
     param1: "value"
     param2: 42
   code: "args.param1.split(',').map(s => s.trim())"
-  in: vars
+  in: namespace
   var: myVar
 ```
 
@@ -778,7 +778,8 @@ call("label") -> myVar {
 | DSL construct | YAML field | Notes |
 |---------------|-----------|-------|
 | `call("name")` | `name: name` | Always present |
-| `-> varName` | `in: vars`, `var: varName` | When binding present |
+| `-> varName` | `in: vars`, `var: varName` | Default namespace is `vars` |
+| `-> ns:varName` | `in: ns`, `var: varName` | Custom namespace |
 | no `->` | `in: ai` | No `var` field emitted |
 | key-value pairs | `args: {key: value}` | Omit `args` if empty. Support nested objects and `$(...)`. |
 | `code(...)` | `code: "..."` | JS expression; strip outer whitespace |
@@ -910,7 +911,7 @@ session("gather") {
     use search
     use mcp knowledge_base
 
-    call("searchDocuments") -> rawDocs {
+    call("searchDocuments") -> vars:rawDocs {
         query   = "{{ .params.topic }}"
         limit   = 10
     }

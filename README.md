@@ -29,6 +29,8 @@ go build -o fml-lsp main.go
 
 ## Usage
 
+The FML CLI is powered by [Cobra](https://github.com/spf13/cobra), providing a robust interface with built-in help.
+
 ### Compiling FML to YAML
 
 ```bash
@@ -39,6 +41,15 @@ go build -o fml-lsp main.go
 
 ```bash
 ./fml decompile plan.yaml -o restored.fml
+```
+
+### Help
+
+You can always use the `--help` flag to see available commands and options:
+
+```bash
+./fml --help
+./fml compile --help
 ```
 
 ## Language Overview

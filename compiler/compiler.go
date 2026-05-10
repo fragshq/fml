@@ -484,8 +484,12 @@ func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
 		Args: make(map[string]interface{}),
 	}
 	if call.Target != nil {
-		y.In = "vars"
-		y.Var = *call.Target
+		if call.Target.Namespace != nil {
+			y.In = *call.Target.Namespace
+		} else {
+			y.In = "vars"
+		}
+		y.Var = call.Target.Name
 	} else {
 		y.In = "ai"
 	}

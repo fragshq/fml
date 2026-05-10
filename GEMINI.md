@@ -11,7 +11,7 @@ The Frags DSL compiler is a Go-based tool that transforms a compact, human-reada
 - **Compiler (`compiler/compiler.go`)**: Implements the multi-pass transformation logic, including session merging, root schema assembly, and "off-side rule" indentation stripping.
 - **Decompiler (`decompiler/decompiler.go`)**: Performs the inverse operation, converting a validated Frags YAML plan back into idiomatic FML source code, preserving comments and structure where possible.
 - **LSP Server (`lsp/main.go`)**: A Language Server Protocol implementation providing real-time diagnostics, semantic highlighting, and basic hover support for modern IDE integration.
-- **CLI (`main.go`)**: Provides a unified command-line interface for compiling `.fml` files and managing the development workflow.
+- **CLI (`main.go`)**: A robust command-line interface powered by Cobra for compiling and decompiling FML/YAML files.
 
 ## 2. Technical Architecture
 
@@ -38,7 +38,7 @@ The compiler implements a unique grouping strategy for the output JSON Schema:
 - **Key Features**:
     - `system("...")`: Sets the global system prompt.
     - `transformer("name") { ... }`: Defines reusable output transformers.
-    - `call("tool") -> var { ... }`: Tool invocations with argument mapping.
+    - `call("tool") -> [ns:]var { ... }`: Tool invocations with namespaced argument mapping.
     - `session("name", after="prev", expect=...) { ... }`: Sequential pipeline steps.
     - `use mcp|apicp|search ...`: Declares tool requirements.
     - Enums (`"a"|"b"`) and optional fields (`field?: type`) are natively supported.

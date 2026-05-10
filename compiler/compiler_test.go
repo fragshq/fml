@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/theirish/fml/parser"
+	"gopkg.in/yaml.v3"
 )
 
 func compileSource(t *testing.T, input string) (*PlanYAML, error) {
@@ -218,24 +219,45 @@ session("s") {
 	assert.Equal(t, "inline f1", f1Schema.Description)
 }
 
-func TestCompiler_ComplexValues(t *testing.T) {
+func TestCompiler_CallOutputNamespaces(t *testing.T) {
 	input := `
-set config = {
-  meta: {
-    id: 1,
-    tag: "test"
-  },
-  expr: $(context.val)
+session("s") {
+  call("tool1") -> var1 { }
+  call("tool2") -> context:var2 { }
+  call("tool3") -> db:var3 { }
 }
 `
 	out, err := compileSource(t, input)
 	assert.NoError(t, err)
 
-	vars := out.Vars.Content[1] // Value of 'config'
-	var m map[string]interface{}
-	vars.Decode(&m)
+	// Get the session 's'
+	sessNode := out.Sessions.Content[1]
+	var preCallsNode *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "preCalls" {
+			preCallsNode = sessNode.Content[i+1]
+			break
+		}
+	}
+	require.NotNil(t, preCallsNode)
+	assert.Equal(t, 3, len(preCallsNode.Content))
 
-	assert.Equal(t, "$(context.val)", m["expr"])
-	meta := m["meta"].(map[string]interface{})
-	assert.Equal(t, 1, meta["id"]) // yaml.v3 decodes small numbers as int
+	type Call struct {
+		In  string `yaml:"in"`
+		Var string `yaml:"var"`
+	}
+
+	var c1, c2, c3 Call
+	preCallsNode.Content[0].Decode(&c1)
+	preCallsNode.Content[1].Decode(&c2)
+	preCallsNode.Content[2].Decode(&c3)
+
+	assert.Equal(t, "vars", c1.In)
+	assert.Equal(t, "var1", c1.Var)
+
+	assert.Equal(t, "context", c2.In)
+	assert.Equal(t, "var2", c2.Var)
+
+	assert.Equal(t, "db", c3.In)
+	assert.Equal(t, "var3", c3.Var)
 }

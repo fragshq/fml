@@ -56,9 +56,14 @@ type TransformerField struct {
 // CallBlock represents a function or tool invocation, mapping inputs to an optional variable.
 type CallBlock struct {
 	Name          string       `"call" "(" @String ")"`
-	Target        *string      `("->" @Ident)?`
+	Target        *CallTarget  `("->" @@)?`
 	InlineComment *string      `@InlineComment?`
 	Fields        []*CallField `"{" @@* "}"`
+}
+
+type CallTarget struct {
+	Namespace *string `(@Ident ":")?`
+	Name      string  `@Ident`
 }
 
 type CallField struct {

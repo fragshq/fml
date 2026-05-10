@@ -202,9 +202,14 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 			cName := d.getMapValue(cNode, "name").Value
 			sb.WriteString(fmt.Sprintf("    call(%q)", cName))
 
+			in := d.getMapValue(cNode, "in")
 			target := d.getMapValue(cNode, "var")
 			if target != nil {
-				sb.WriteString(fmt.Sprintf(" -> %s", target.Value))
+				if in != nil && in.Value != "vars" && in.Value != "ai" {
+					sb.WriteString(fmt.Sprintf(" -> %s:%s", in.Value, target.Value))
+				} else {
+					sb.WriteString(fmt.Sprintf(" -> %s", target.Value))
+				}
 			}
 			sb.WriteString(" {\n")
 

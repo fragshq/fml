@@ -49,7 +49,7 @@ session("elaborate", after="gather", expect=context.overview.keyPoints != null, 
     - Expand each key point into a detailed explanation.
       Be concise but thorough. Limit to {{ .params.max_results }} points.
 
-    schema string[]
+    schema [string]
 }
 
 components {

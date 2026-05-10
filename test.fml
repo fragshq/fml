@@ -10,7 +10,7 @@ set defaultRegion = "eu-west"
 
 # This is the transformer we love
 transformer("slimResults") {
-    on_function = "searchDocuments"
+    onFunctionOutput = "searchDocuments"
     jmesPath    = "[*].{id: id, title: title, snippet: snippet}"
 }
 
@@ -18,7 +18,6 @@ transformer("slimResults") {
 session("gather") {
     use search
     use mcp knowledge_base
-
     call("searchDocuments") -> rawDocs {
         query   = "{{ .params.topic }}"
         limit   = { 

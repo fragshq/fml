@@ -318,8 +318,8 @@ parameters:
 
 ```
 transformer("slimRepos") {
-    on_function = "listRepositories"
-    jmesPath    = "[*].{name: name, url: html_url}"
+    onFunctionOutput = "listRepositories"
+    jmesPath         = "[*].{name: name, url: html_url}"
 }
 ```
 
@@ -902,8 +902,8 @@ parameters {
 set defaultRegion = "eu-west"
 
 transformer("slimResults") {
-    on_function = "searchDocuments"
-    jmesPath    = "[*].{id: id, title: title, snippet: snippet}"
+    onFunctionOutput = "searchDocuments"
+    jmesPath         = "[*].{id: id, title: title, snippet: snippet}"
 }
 
 session("gather") {

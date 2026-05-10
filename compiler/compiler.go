@@ -133,6 +133,9 @@ func (c *Compiler) collectComment(s string) {
 
 // nodeValue encodes a value and attaches any pending or inline comments.
 func (c *Compiler) nodeValue(v interface{}, inline *string) *yaml.Node {
+	if v == nil {
+		return nil
+	}
 	var node yaml.Node
 	node.Encode(v)
 	if len(c.pendingComments) > 0 {
@@ -418,14 +421,23 @@ func (c *Compiler) ensureNodeSeqField(parent *yaml.Node, key string) *yaml.Node 
 func (c *Compiler) setNodeMapField(parent *yaml.Node, key string, val interface{}) {
 	for i := 0; i < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
-			parent.Content[i+1].Encode(val)
+			if node, ok := val.(*yaml.Node); ok {
+				parent.Content[i+1] = node
+			} else {
+				parent.Content[i+1].Encode(val)
+			}
 			return
 		}
 	}
-	var kn, vn yaml.Node
+	var kn yaml.Node
 	kn.Encode(key)
-	vn.Encode(val)
-	parent.Content = append(parent.Content, &kn, &vn)
+	if node, ok := val.(*yaml.Node); ok {
+		parent.Content = append(parent.Content, &kn, node)
+	} else {
+		var vn yaml.Node
+		vn.Encode(val)
+		parent.Content = append(parent.Content, &kn, &vn)
+	}
 }
 
 func (c *Compiler) setNodeMapFieldNode(parent *yaml.Node, key string, vn *yaml.Node) {

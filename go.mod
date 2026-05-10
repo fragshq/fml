@@ -1,4 +1,4 @@
-module github.com/theirish/frags-compiler
+module github.com/theirish/fml
 
 go 1.25.4
 

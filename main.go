@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/theirish/frags-compiler/compiler"
-	"github.com/theirish/frags-compiler/parser"
+	"github.com/theirish/fml/compiler"
+	"github.com/theirish/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

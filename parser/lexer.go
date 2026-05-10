@@ -9,10 +9,10 @@ import (
 	"github.com/alecthomas/participle/v2/lexer"
 )
 
-// fragsLexerDefinition implements lexer.Definition for the Frags DSL.
-type fragsLexerDefinition struct{}
+// FRAGSLexerDefinition implements lexer.Definition for the Frags DSL.
+type FRAGSLexerDefinition struct{}
 
-func (d *fragsLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, error) {
+func (d *FRAGSLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func (d *fragsLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, e
 	}, nil
 }
 
-func (d *fragsLexerDefinition) Symbols() map[string]lexer.TokenType {
+func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 	return map[string]lexer.TokenType{
 		"Comment":       -2,
 		"InlineComment": -10,
@@ -61,7 +61,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				t, err := l.consumePromptItem(i)
 				return t, err
 			}
-			
+
 			if i < len(l.s) && l.s[i] == '#' {
 				l.s = l.s[i:]
 				l.pos.Column += i
@@ -175,7 +175,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 	depth := 1
 	i := 0
 	startPos := l.pos
-	
+
 	for i < len(l.s) {
 		r := rune(l.s[i])
 		if r == start {
@@ -192,7 +192,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 	if depth > 0 {
 		return lexer.Token{}, fmt.Errorf("%s: unclosed balanced block (missing %q)", startPos, end)
 	}
-	
+
 	val := l.s[:i]
 	l.s = l.s[i:]
 	for _, r := range val {
@@ -203,7 +203,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 			l.pos.Column++
 		}
 	}
-	
+
 	return lexer.Token{
 		Type:  -7,
 		Value: val,
@@ -235,17 +235,28 @@ func (l *fragsLexer) consume(n int, typ string) lexer.Token {
 
 func (l *fragsLexer) typeToToken(typ string) lexer.TokenType {
 	switch typ {
-	case "Comment": return -2
-	case "InlineComment": return -10
-	case "String": return -3
-	case "Number": return -4
-	case "Bool": return -5
-	case "Ident": return -6
-	case "Punct": return -7
-	case "Whitespace": return -8
-	case "PromptItem": return -9
-	case "AttrValue": return -11
-	case "CodeValue": return -12
+	case "Comment":
+		return -2
+	case "InlineComment":
+		return -10
+	case "String":
+		return -3
+	case "Number":
+		return -4
+	case "Bool":
+		return -5
+	case "Ident":
+		return -6
+	case "Punct":
+		return -7
+	case "Whitespace":
+		return -8
+	case "PromptItem":
+		return -9
+	case "AttrValue":
+		return -11
+	case "CodeValue":
+		return -12
 	}
 	return -1
 }
@@ -331,7 +342,7 @@ func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
 	for i < len(l.s) && l.s[i] != '\n' && l.s[i] != '\r' {
 		i++
 	}
-	
+
 	totalLen := i
 	for {
 		nextStart := totalLen
@@ -346,12 +357,12 @@ func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
 		} else {
 			break
 		}
-		
+
 		k := 0
 		for j+k < len(l.s) && (l.s[j+k] == ' ' || l.s[j+k] == '\t') {
 			k++
 		}
-		
+
 		if j+k < len(l.s) && l.s[j+k] != '\n' && l.s[j+k] != '\r' && k > dashCol {
 			j += k
 			for j < len(l.s) && l.s[j] != '\n' && l.s[j] != '\r' {
@@ -374,7 +385,7 @@ func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
 		Value: val,
 		Pos:   l.pos,
 	}
-	
+
 	l.s = l.s[totalLen:]
 	for _, r := range val {
 		if r == '\n' {
@@ -384,6 +395,6 @@ func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
 			l.pos.Column++
 		}
 	}
-	
+
 	return token, nil
 }

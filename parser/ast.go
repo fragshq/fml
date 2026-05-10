@@ -33,11 +33,11 @@ type ParametersBlock struct {
 
 // ParamEntry defines a single input parameter with optional documentation and default values.
 type ParamEntry struct {
-	LeadingComments []string    `@Comment*`
-	Name            string      `@Ident ":"`
-	Type            *TypeExpr   `@@`
-	Default         *Value      `("=" @@)?`
-	InlineComment   *string     `@InlineComment?`
+	LeadingComments []string  `@Comment*`
+	Name            string    `@Ident ":"`
+	Type            *TypeExpr `@@`
+	Default         *Value    `("=" @@)?`
+	InlineComment   *string   `@InlineComment?`
 }
 
 type TransformerBlock struct {
@@ -47,7 +47,7 @@ type TransformerBlock struct {
 }
 
 type TransformerField struct {
-	TriggerType   *string `(@("on_function" | "on_input" | "on_resource")`
+	TriggerType   *string `(@("onFunctionOutput" | "onFunctionInput" | "onResource")`
 	TriggerValue  *string `"=" @String)`
 	JMESPath      *string `| ("jmesPath" "=" @String)`
 	InlineComment *string `@InlineComment?`
@@ -112,15 +112,15 @@ type PromptComponent struct {
 
 // SessionBlock represents a logical pipeline step with its own context, tools, and output schema.
 type SessionBlock struct {
-	Name          string          `"session" "(" @String`
-	Attributes    []*SessionAttr  `@@* ")" "{"`
-	InlineComment *string         `@InlineComment?`
-	Statements    []*SessionStmt  `@@* "}"`
+	Name          string         `"session" "(" @String`
+	Attributes    []*SessionAttr `@@* ")" "{"`
+	InlineComment *string        `@InlineComment?`
+	Statements    []*SessionStmt `@@* "}"`
 }
 
-// SessionAttr handles session configuration such as dependencies (after/expect) or iteration.
+// SessionAttr handles session configuration such as dependencies (after/expect), iteration, or schema target renaming.
 type SessionAttr struct {
-	Type  string `"," @("after" | "expect" | "iterate") "="`
+	Type  string `"," @("after" | "expect" | "iterate" | "target") "="`
 	Value string `(@String | @AttrValue)`
 }
 
@@ -128,7 +128,7 @@ type SessionStmt struct {
 	Comment *string      `@Comment`
 	Set     *SetStmt     `| @@`
 	Use     *UseStmt     `| @@`
-	Call    *CallBlock    `| @@`
+	Call    *CallBlock   `| @@`
 	Context *ContextStmt `| @@`
 	Schema  *SchemaBlock `| @@`
 	Prompt  *PromptLines `| @@`
@@ -159,11 +159,11 @@ type SchemaBlock struct {
 }
 
 type SchemaField struct {
-	LeadingComments []string    `@Comment*`
-	Name            string      `@Ident`
-	Optional        bool        `@("?")? ":"`
-	Type            *TypeExpr   `@@`
-	InlineComment   *string     `@InlineComment?`
+	LeadingComments []string  `@Comment*`
+	Name            string    `@Ident`
+	Optional        bool      `@("?")? ":"`
+	Type            *TypeExpr `@@`
+	InlineComment   *string   `@InlineComment?`
 }
 
 // TypeExpr is the unified type representation, supporting scalars, arrays, objects, and refs.
@@ -174,11 +174,11 @@ type TypeExpr struct {
 }
 
 type TypeBase struct {
-	Scalar *string      `@("string" | "int" | "float" | "bool" | "any")`
-	Array  *TypeExpr    `| "[" @@ "]"`
-	Object *ObjectBody  `| @@`
-	Ref    *string      `| "$" @Ident`
-	Enum   []string     `| (@(Ident|String) ("|" @(Ident|String))* )`
+	Scalar *string     `@("string" | "int" | "float" | "bool" | "any")`
+	Array  *TypeExpr   `| "[" @@ "]"`
+	Object *ObjectBody `| @@`
+	Ref    *string     `| "$" @Ident`
+	Enum   []string    `| (@(Ident|String) ("|" @(Ident|String))* )`
 }
 
 type ObjectBody struct {
@@ -188,7 +188,7 @@ type ObjectBody struct {
 // NewParser initializes the Frags DSL parser with the custom stateful lexer.
 func NewParser() (*participle.Parser[Plan], error) {
 	return participle.Build[Plan](
-		participle.Lexer(&fragsLexerDefinition{}),
+		participle.Lexer(&FRAGSLexerDefinition{}),
 		participle.Unquote("String"),
 		participle.UseLookahead(10),
 	)

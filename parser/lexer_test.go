@@ -9,7 +9,7 @@ import (
 )
 
 func TestLexer_BasicTokens(t *testing.T) {
-	def := &fragsLexerDefinition{}
+	def := &FRAGSLexerDefinition{}
 	l, err := def.Lex("test.frags", strings.NewReader(`system("hello") set x = 5 true # comment`))
 	assert.NoError(t, err)
 
@@ -23,7 +23,7 @@ func TestLexer_BasicTokens(t *testing.T) {
 }
 
 func TestLexer_PromptItem(t *testing.T) {
-	def := &fragsLexerDefinition{}
+	def := &FRAGSLexerDefinition{}
 	input := `- First line
   second line
 - Item 2`
@@ -36,14 +36,14 @@ func TestLexer_PromptItem(t *testing.T) {
 	assert.Equal(t, -9, int(tokens[0].Type)) // PromptItem
 	assert.Contains(t, tokens[0].Value, "First line")
 	assert.Contains(t, tokens[0].Value, "second line")
-	
+
 	assert.Equal(t, -9, int(tokens[1].Type)) // PromptItem
 	assert.Equal(t, "- Item 2", tokens[1].Value)
 }
 
 func TestLexer_Errors(t *testing.T) {
-	def := &fragsLexerDefinition{}
-	
+	def := &FRAGSLexerDefinition{}
+
 	tests := []struct {
 		name  string
 		input string
@@ -69,7 +69,7 @@ func TestLexer_Errors(t *testing.T) {
 }
 
 func TestLexer_StateTransitions(t *testing.T) {
-	def := &fragsLexerDefinition{}
+	def := &FRAGSLexerDefinition{}
 	// Test AttrValue transition
 	l, _ := def.Lex("test.frags", strings.NewReader(`session("s", expect=context.x > 0) { }`))
 	tokens, err := lexer.ConsumeAll(l)

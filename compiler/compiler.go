@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/theirish/frags-compiler/parser"
+	"github.com/theirish/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,6 +15,7 @@ type Compiler struct {
 	sessionSchemas  map[string]*JSONSchema
 	sessionOrder    []string
 	sessionOptional map[string]bool
+	sessionTargets  map[string]string
 	pendingComments []string // Orphaned comments to be attached as HeadComments
 }
 
@@ -26,6 +27,7 @@ func New(plan *parser.Plan) *Compiler {
 		},
 		sessionSchemas:  make(map[string]*JSONSchema),
 		sessionOptional: make(map[string]bool),
+		sessionTargets:  make(map[string]string),
 	}
 }
 
@@ -103,10 +105,14 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 		}
 
 		schema.XSession = name
-		rootSchema.Properties[name] = schema
-		
+		propName := name
+		if target, ok := c.sessionTargets[name]; ok {
+			propName = target
+		}
+		rootSchema.Properties[propName] = schema
+
 		if !c.sessionOptional[name] {
-			rootSchema.Required = append(rootSchema.Required, name)
+			rootSchema.Required = append(rootSchema.Required, propName)
 		}
 	}
 
@@ -150,7 +156,7 @@ func (c *Compiler) addNodeMapEntry(mapNode *yaml.Node, key string, val interface
 	if inline != nil {
 		keyNode.LineComment = strings.TrimSpace(strings.TrimPrefix(*inline, "#"))
 	}
-	
+
 	var valNode yaml.Node
 	valNode.Encode(val)
 	mapNode.Content = append(mapNode.Content, &keyNode, &valNode)
@@ -170,7 +176,7 @@ func (c *Compiler) processParameters(p *parser.ParametersBlock) error {
 		if entry.Default != nil {
 			param.Default = c.nodeValue(c.compileValue(entry.Default), nil)
 		}
-		
+
 		desc := c.resolveDescription(entry.LeadingComments, entry.InlineComment)
 		if desc != "" {
 			param.Schema.Description = desc
@@ -193,9 +199,12 @@ func (c *Compiler) processTransformer(t *parser.TransformerBlock) error {
 		} else if field.TriggerType != nil && field.TriggerValue != nil {
 			val := strings.Trim(*field.TriggerValue, "\"")
 			switch *field.TriggerType {
-			case "on_function": trans.OnFunctionOutput = val
-			case "on_input":    trans.OnFunctionInput = val
-			case "on_resource": trans.OnResource = val
+			case "onFunctionOutput":
+				trans.OnFunctionOutput = val
+			case "onFunctionInput":
+				trans.OnFunctionInput = val
+			case "onResource":
+				trans.OnResource = val
 			}
 		}
 	}
@@ -220,7 +229,9 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 			for _, field := range item.Schema.Fields {
 				fSchema := c.compileType(field.Type)
 				desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
-				if desc != "" { fSchema.Description = desc }
+				if desc != "" {
+					fSchema.Description = desc
+				}
 				schema.Properties[field.Name] = fSchema
 				if !field.Optional && !field.Type.Optional {
 					schema.Required = append(schema.Required, field.Name)
@@ -263,7 +274,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		if s.InlineComment != nil {
 			keyNode.LineComment = strings.TrimSpace(strings.TrimPrefix(*s.InlineComment, "#"))
 		}
-		
+
 		sessNode = &yaml.Node{Kind: yaml.MappingNode}
 		c.output.Sessions.Content = append(c.output.Sessions.Content, &keyNode, sessNode)
 		c.sessionOrder = append(c.sessionOrder, s.Name)
@@ -285,6 +296,8 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			c.addDependsOn(sessNode, "", attr.Value)
 		case "iterate":
 			c.setNodeMapField(sessNode, "iterateOn", attr.Value)
+		case "target":
+			c.sessionTargets[s.Name] = strings.Trim(attr.Value, "\"")
 		}
 	}
 
@@ -303,14 +316,20 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			if stmt.Use.Search {
 				tool.Type = "internet_search"
 			} else {
-				if stmt.Use.Type != nil { tool.Type = *stmt.Use.Type }
-				if stmt.Use.Name != nil { tool.Name = *stmt.Use.Name }
+				if stmt.Use.Type != nil {
+					tool.Type = *stmt.Use.Type
+				}
+				if stmt.Use.Name != nil {
+					tool.Name = *stmt.Use.Name
+				}
 			}
 			toolsNode.Content = append(toolsNode.Content, c.nodeValue(tool, stmt.Use.InlineComment))
 		case stmt.Call != nil:
 			callsNode := c.ensureNodeSeqField(sessNode, "preCalls")
 			callNode, err := c.compileCallNode(stmt.Call)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			callsNode.Content = append(callsNode.Content, callNode)
 		case stmt.Context != nil:
 			c.setNodeMapFieldNode(sessNode, "context", c.nodeValue(c.compileValue(stmt.Context.Value), stmt.Context.InlineComment))
@@ -333,7 +352,9 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 				for _, field := range stmt.Schema.Fields {
 					fSchema := c.compileType(field.Type)
 					desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
-					if desc != "" { fSchema.Description = desc }
+					if desc != "" {
+						fSchema.Description = desc
+					}
 
 					if _, exists := sessSchema.Properties[field.Name]; exists {
 						return fmt.Errorf("field %q already defined in session %q", field.Name, s.Name)
@@ -353,7 +374,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		for i, p := range promptItems {
 			cleaned[i] = c.cleanPromptItem(p)
 		}
-		
+
 		if len(cleaned) == 1 {
 			c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(cleaned[0], nil))
 		} else if len(cleaned) == 2 {
@@ -468,67 +489,101 @@ func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
 
 func (c *Compiler) cleanPromptItem(s string) string {
 	lines := strings.Split(s, "\n")
-	if len(lines) == 0 { return "" }
+	if len(lines) == 0 {
+		return ""
+	}
 	first := lines[0]
 	i := strings.Index(first, "- ")
-	if i != -1 { first = first[i+2:] } else if i = strings.Index(first, "-"); i != -1 { first = first[i+1:] }
+	if i != -1 {
+		first = first[i+2:]
+	} else if i = strings.Index(first, "-"); i != -1 {
+		first = first[i+1:]
+	}
 	var result []string
 	result = append(result, strings.TrimRight(first, " \t"))
 	if len(lines) > 1 {
 		fullFirst := lines[0]
 		indent := 0
-		for indent < len(fullFirst) && (fullFirst[indent] == ' ' || fullFirst[indent] == '\t') { indent++ }
+		for indent < len(fullFirst) && (fullFirst[indent] == ' ' || fullFirst[indent] == '\t') {
+			indent++
+		}
 		stripLen := indent + 1
 		for _, line := range lines[1:] {
-			if len(line) > stripLen { result = append(result, strings.TrimRight(line[stripLen:], " \t")) } else { result = append(result, "") }
+			if len(line) > stripLen {
+				result = append(result, strings.TrimRight(line[stripLen:], " \t"))
+			} else {
+				result = append(result, "")
+			}
 		}
 	}
 	return strings.TrimSpace(strings.Join(result, "\n"))
 }
 
 func (c *Compiler) compileType(t *parser.TypeExpr) *JSONSchema {
-	if t == nil { return &JSONSchema{} }
+	if t == nil {
+		return &JSONSchema{}
+	}
 	schema := c.compileTypeBase(t.Base)
-	if t.Suffix { schema = &JSONSchema{Type: "array", Items: schema} }
+	if t.Suffix {
+		schema = &JSONSchema{Type: "array", Items: schema}
+	}
 	return schema
 }
 
 func (c *Compiler) compileTypeBase(t *parser.TypeBase) *JSONSchema {
-	if t == nil { return &JSONSchema{} }
+	if t == nil {
+		return &JSONSchema{}
+	}
 	switch {
 	case t.Scalar != nil:
 		st := *t.Scalar
-		if st == "int" { st = "integer" } else if st == "float" { st = "number" }
-		if st == "any" { return &JSONSchema{} }
+		if st == "int" {
+			st = "integer"
+		} else if st == "float" {
+			st = "number"
+		}
+		if st == "any" {
+			return &JSONSchema{}
+		}
 		return &JSONSchema{Type: st}
 	case t.Array != nil:
 		inner := c.compileType(t.Array)
-		return &JSONSchema{Type:  "array", Items: inner}
+		return &JSONSchema{Type: "array", Items: inner}
 	case t.Object != nil:
 		schema := &JSONSchema{Type: "object", Properties: make(map[string]*JSONSchema)}
 		for _, field := range t.Object.Fields {
 			fSchema := c.compileType(field.Type)
 			schema.Properties[field.Name] = fSchema
-			if !field.Optional && !field.Type.Optional { schema.Required = append(schema.Required, field.Name) }
+			if !field.Optional && !field.Type.Optional {
+				schema.Required = append(schema.Required, field.Name)
+			}
 		}
 		return schema
 	case t.Ref != nil:
 		return &JSONSchema{Ref: fmt.Sprintf("#/components/schemas/%s", *t.Ref)}
 	case len(t.Enum) > 0:
 		enum := make([]interface{}, len(t.Enum))
-		for i, e := range t.Enum { enum[i] = e }
-		return &JSONSchema{ Type: "string", Enum: enum }
+		for i, e := range t.Enum {
+			enum[i] = e
+		}
+		return &JSONSchema{Type: "string", Enum: enum}
 	}
 	return &JSONSchema{}
 }
 
 func (c *Compiler) compileValue(v *parser.Value) interface{} {
-	if v == nil { return nil }
+	if v == nil {
+		return nil
+	}
 	switch {
-	case v.String != nil: return *v.String
-	case v.Number != nil: return *v.Number
-	case v.Bool != nil:   return *v.Bool
-	case v.Expr != nil:   return fmt.Sprintf("$(%s)", *v.Expr)
+	case v.String != nil:
+		return *v.String
+	case v.Number != nil:
+		return *v.Number
+	case v.Bool != nil:
+		return *v.Bool
+	case v.Expr != nil:
+		return fmt.Sprintf("$(%s)", *v.Expr)
 	case v.Object != nil:
 		m := make(map[string]interface{})
 		for _, entry := range v.Object.Entries {
@@ -540,21 +595,29 @@ func (c *Compiler) compileValue(v *parser.Value) interface{} {
 }
 
 func (c *Compiler) resolveDescription(leading []string, inline *string) string {
-	if inline != nil { return strings.TrimSpace(strings.TrimPrefix(*inline, "#")) }
+	if inline != nil {
+		return strings.TrimSpace(strings.TrimPrefix(*inline, "#"))
+	}
 	if len(leading) > 0 {
 		var lines []string
-		for _, l := range leading { lines = append(lines, strings.TrimSpace(strings.TrimPrefix(l, "#"))) }
+		for _, l := range leading {
+			lines = append(lines, strings.TrimSpace(strings.TrimPrefix(l, "#")))
+		}
 		return strings.Join(lines, " ")
 	}
 	return ""
 }
 
 func (c *Compiler) isTypeArray(s *JSONSchema) bool {
-	if s.Type == "array" { return true }
+	if s.Type == "array" {
+		return true
+	}
 	if s.Ref != "" {
 		name := strings.TrimPrefix(s.Ref, "#/components/schemas/")
 		if c.output.Components != nil && c.output.Components.Schemas != nil {
-			if comp, ok := c.output.Components.Schemas[name]; ok { return comp.Type == "array" }
+			if comp, ok := c.output.Components.Schemas[name]; ok {
+				return comp.Type == "array"
+			}
 		}
 	}
 	return false
@@ -571,14 +634,22 @@ func (c *Compiler) finalizeRequiredTools() {
 				break
 			}
 		}
-		if toolsNode == nil { continue }
+		if toolsNode == nil {
+			continue
+		}
 		for _, tn := range toolsNode.Content {
 			var typeVal, nameVal string
 			for j := 0; j < len(tn.Content); j += 2 {
-				if tn.Content[j].Value == "type" { typeVal = tn.Content[j+1].Value }
-				if tn.Content[j].Value == "name" { nameVal = tn.Content[j+1].Value }
+				if tn.Content[j].Value == "type" {
+					typeVal = tn.Content[j+1].Value
+				}
+				if tn.Content[j].Value == "name" {
+					nameVal = tn.Content[j+1].Value
+				}
 			}
-			if typeVal == "internet_search" { continue }
+			if typeVal == "internet_search" {
+				continue
+			}
 			key := fmt.Sprintf("%s:%s", typeVal, nameVal)
 			if !seen[key] {
 				c.output.RequiredTools = append(c.output.RequiredTools, &ToolYAML{Type: typeVal, Name: nameVal})

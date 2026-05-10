@@ -118,7 +118,7 @@ TransformerBlock ← "transformer" "(" STRING_LIT ")" "{" TransformerField* "}"
 TransformerField ← TransformerTrigger "=" STRING_LIT NEWLINE
                  / "jmesPath"         "=" STRING_LIT NEWLINE
 
-TransformerTrigger ← "on_function" | "on_input" | "on_resource"
+TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
 # ── call (plan-level and session-level share the same syntax) ─────────────────
 
@@ -154,6 +154,7 @@ SessionAttrList ← ("," SessionAttr)+
 SessionAttr  ← "after"   "=" STRING_LIT      # dependsOn[].session
              / "expect"  "=" RawExpr          # dependsOn[].expression (unquoted Expr)
              / "iterate" "=" RawExpr          # iterateOn (unquoted Expr)
+             / "target"  "=" STRING_LIT       # schema property name override
 
 SessionStmt  ← COMMENT
              / SetStmt
@@ -326,9 +327,9 @@ transformer("slimRepos") {
 
 | DSL field | YAML field |
 |-----------|-----------|
-| `on_function` | `onFunctionOutput` |
-| `on_input` | `onFunctionInput` |
-| `on_resource` | `onResource` |
+| `onFunctionOutput` | `onFunctionOutput` |
+| `onFunctionInput` | `onFunctionInput` |
+| `onResource` | `onResource` |
 
 Exactly one trigger field must be present. `jmesPath` is always required.
 
@@ -409,6 +410,7 @@ session("mySession", after="prev", expect=context.flag==true, iterate=context.it
 | `expect=expr` | `dependsOn: [{expression: "expr"}]` | conditional gate |
 | `after="x", expect=expr` | `dependsOn: [{session: x, expression: "expr"}]` | both in same entry |
 | `iterate=expr` | `iterateOn: "expr"` | session's schema slice must be array type |
+| `target="y"` | (Schema root) | Renames the property in root schema to `y` |
 
 `after` and `expect` may appear multiple times to produce multiple `dependsOn` entries:
 

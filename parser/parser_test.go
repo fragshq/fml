@@ -35,7 +35,7 @@ func TestParser_AnonymousSchema(t *testing.T) {
 	input := `session("it") { schema [string] }`
 	plan, err := p.ParseString("test.frags", input)
 	assert.NoError(t, err)
-	
+
 	schema := plan.Statements[0].Session.Statements[0].Schema
 	assert.NotNil(t, schema.Type)
 	assert.NotNil(t, schema.Type.Base.Array)
@@ -72,4 +72,15 @@ func TestParser_ComplexValue(t *testing.T) {
 	assert.Len(t, val.Object.Entries, 3)
 	assert.Equal(t, "limit", val.Object.Entries[0].Key)
 	assert.Equal(t, "context.base.path", *val.Object.Entries[2].Value.Expr)
+}
+
+func TestParser_SessionTarget(t *testing.T) {
+	p, _ := NewParser()
+	input := `session("s1", target="output") { }`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	attr := plan.Statements[0].Session.Attributes[0]
+	assert.Equal(t, "target", attr.Type)
+	assert.Equal(t, "output", attr.Value)
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/theirish/frags-compiler/parser"
+	"github.com/theirish/fml/parser"
 )
 
 func compileSource(t *testing.T, input string) (*PlanYAML, error) {
@@ -48,7 +48,7 @@ session("loop", iterate=context.items) {
 `
 	out, err := compileSource(t, input)
 	assert.NoError(t, err)
-	
+
 	var schema JSONSchema
 	err = out.Schema.Decode(&schema)
 	assert.NoError(t, err)
@@ -100,7 +100,7 @@ parameters {
 }
 
 transformer("filter") {
-    on_function = "search"
+    onFunctionOutput = "search"
     jmesPath = "[*].id"
 }
 
@@ -133,6 +133,53 @@ session("report", after="gather", iterate=gather.ids) {
 	var schema JSONSchema
 	out.Schema.Decode(&schema)
 	assert.Equal(t, "array", schema.Properties["report"].Type)
+}
+
+func TestCompiler_TargetRenaming(t *testing.T) {
+	input := `
+session("gather", target="results") {
+  schema {
+    found: bool
+  }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	assert.Contains(t, schema.Properties, "results")
+	assert.NotContains(t, schema.Properties, "gather")
+	assert.Equal(t, "gather", schema.Properties["results"].XSession)
+	assert.Contains(t, schema.Required, "results")
+}
+
+func TestCompiler_TargetWithIteration(t *testing.T) {
+	input := `
+session("gather") { schema { ids: [int] } }
+session("process", after="gather", iterate=gather.ids, target="processed_items") {
+  schema {
+    result: string
+  }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	// Check that 'process' was renamed to 'processed_items'
+	assert.Contains(t, schema.Properties, "processed_items")
+	assert.NotContains(t, schema.Properties, "process")
+
+	// Verify it is still an array because of 'iterate'
+	prop := schema.Properties["processed_items"]
+	assert.Equal(t, "array", prop.Type)
+	assert.Equal(t, "process", prop.XSession)
 }
 
 func cOrder(p *PlanYAML) []string {

@@ -1,0 +1,76 @@
+package compiler
+
+import "gopkg.in/yaml.v3"
+
+// PlanYAML represents the finalized Frags plan file structure with granular comment support.
+type PlanYAML struct {
+	SystemPrompt  *yaml.Node               `yaml:"systemPrompt,omitempty"`
+	Parameters    *yaml.Node               `yaml:"parameters,omitempty"` // SequenceNode
+	Vars          *yaml.Node               `yaml:"vars,omitempty"`       // MappingNode
+	RequiredTools []*ToolYAML              `yaml:"requiredTools,omitempty"`
+	Transformers  *yaml.Node               `yaml:"transformers,omitempty"` // SequenceNode
+	PreCalls      *yaml.Node               `yaml:"preCalls,omitempty"`     // SequenceNode
+	Sessions      *yaml.Node               `yaml:"sessions,omitempty"`     // MappingNode
+	Schema        *yaml.Node               `yaml:"schema,omitempty"`
+	Components    *ComponentsYAML          `yaml:"components,omitempty"`
+}
+
+type ParameterYAML struct {
+	Name    string      `yaml:"name"`
+	Schema  *JSONSchema `yaml:"schema"`
+	Default *yaml.Node  `yaml:"default,omitempty"`
+}
+
+type ToolYAML struct {
+	Type string `yaml:"type"`
+	Name string `yaml:"name,omitempty"`
+}
+
+type TransformerYAML struct {
+	Name             string `yaml:"name"`
+	OnFunctionOutput string `yaml:"onFunctionOutput,omitempty"`
+	OnFunctionInput  string `yaml:"onFunctionInput,omitempty"`
+	OnResource       string `yaml:"onResource,omitempty"`
+	JMESPath         string `yaml:"jmesPath"`
+}
+
+type CallYAML struct {
+	Name string                 `yaml:"name"`
+	Args map[string]interface{} `yaml:"args,omitempty"`
+	Code string                 `yaml:"code,omitempty"`
+	In   string                 `yaml:"in,omitempty"`
+	Var  string                 `yaml:"var,omitempty"`
+}
+
+type SessionYAML struct {
+	DependsOn []*DependsOnYAML       `yaml:"dependsOn,omitempty"`
+	IterateOn string                 `yaml:"iterateOn,omitempty"`
+	Vars      *yaml.Node             `yaml:"vars,omitempty"`     // MappingNode
+	Tools     []*ToolYAML            `yaml:"tools,omitempty"`
+	PreCalls  *yaml.Node             `yaml:"preCalls,omitempty"` // SequenceNode
+	Context   *yaml.Node             `yaml:"context,omitempty"`
+	PrePrompt *yaml.Node             `yaml:"prePrompt,omitempty"`
+	Prompt    *yaml.Node             `yaml:"prompt,omitempty"`
+}
+
+type DependsOnYAML struct {
+	Session    string `yaml:"session,omitempty"`
+	Expression string `yaml:"expression,omitempty"`
+}
+
+type ComponentsYAML struct {
+	Schemas map[string]*JSONSchema `yaml:"schemas,omitempty"`
+	Prompts map[string]*yaml.Node  `yaml:"prompts,omitempty"`
+}
+
+// JSONSchema node with comment support for fields that aren't description-driven.
+type JSONSchema struct {
+	Type        string                 `yaml:"type,omitempty"`
+	Description string                 `yaml:"description,omitempty"`
+	Properties  map[string]*JSONSchema `yaml:"properties,omitempty"`
+	Required    []string               `yaml:"required,omitempty"`
+	Items       *JSONSchema            `yaml:"items,omitempty"`
+	Enum        []interface{}          `yaml:"enum,omitempty"`
+	Ref         string                 `yaml:"$ref,omitempty"`
+	XSession    string                 `yaml:"x-session,omitempty"`
+}

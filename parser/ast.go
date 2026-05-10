@@ -27,7 +27,7 @@ type SystemBlock struct {
 }
 
 type ParametersBlock struct {
-	Entries       []*ParamEntry `"parameters" "{" @@* "}"`
+	Entries       []*ParamEntry `"parameters" "{" (@@ (","? @@)*)? "}"`
 	InlineComment *string       `@InlineComment?`
 }
 
@@ -107,7 +107,7 @@ type ComponentItem struct {
 
 type SchemaComponent struct {
 	Name   string         `"schema" "(" @String ")" "{"`
-	Fields []*SchemaField `@@* "}"`
+	Fields []*SchemaField `(@@ (","? @@)*)? "}"`
 }
 
 type PromptComponent struct {
@@ -158,7 +158,7 @@ type PromptLines struct {
 
 // SchemaBlock defines the output structure of a session or component.
 type SchemaBlock struct {
-	Fields        []*SchemaField `("schema" "{" @@* "}")`
+	Fields        []*SchemaField `("schema" "{" (@@ (","? @@)*)? "}")`
 	Type          *TypeExpr      `| ("schema" @@)`
 	InlineComment *string        `@InlineComment?`
 }
@@ -187,7 +187,7 @@ type TypeBase struct {
 }
 
 type ObjectBody struct {
-	Fields []*SchemaField `"{" @@* "}"`
+	Fields []*SchemaField `"{" (@@ (","? @@)*)? "}"`
 }
 
 // NewParser initializes the Frags DSL parser with the custom stateful lexer.

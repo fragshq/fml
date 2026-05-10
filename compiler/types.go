@@ -4,15 +4,47 @@ import "gopkg.in/yaml.v3"
 
 // PlanYAML represents the finalized Frags plan file structure with granular comment support.
 type PlanYAML struct {
-	SystemPrompt  *yaml.Node               `yaml:"systemPrompt,omitempty"`
-	Parameters    *yaml.Node               `yaml:"parameters,omitempty"` // SequenceNode
-	Vars          *yaml.Node               `yaml:"vars,omitempty"`       // MappingNode
-	RequiredTools []*ToolYAML              `yaml:"requiredTools,omitempty"`
-	Transformers  *yaml.Node               `yaml:"transformers,omitempty"` // SequenceNode
-	PreCalls      *yaml.Node               `yaml:"preCalls,omitempty"`     // SequenceNode
-	Sessions      *yaml.Node               `yaml:"sessions,omitempty"`     // MappingNode
-	Schema        *yaml.Node               `yaml:"schema,omitempty"`
-	Components    *ComponentsYAML          `yaml:"components,omitempty"`
+	SystemPrompt  *yaml.Node      `yaml:"systemPrompt,omitempty"`
+	Parameters    *yaml.Node      `yaml:"parameters,omitempty"` // SequenceNode
+	Vars          *yaml.Node      `yaml:"vars,omitempty"`       // MappingNode
+	RequiredTools []*ToolYAML     `yaml:"requiredTools,omitempty"`
+	Transformers  *yaml.Node      `yaml:"transformers,omitempty"` // SequenceNode
+	PreCalls      *yaml.Node      `yaml:"preCalls,omitempty"`     // SequenceNode
+	Sessions      *yaml.Node      `yaml:"sessions,omitempty"`     // MappingNode
+	Schema        *yaml.Node      `yaml:"schema,omitempty"`
+	Components    *ComponentsYAML `yaml:"components,omitempty"`
+}
+
+func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		val := value.Content[i+1]
+		switch key {
+		case "systemPrompt":
+			p.SystemPrompt = val
+		case "parameters":
+			p.Parameters = val
+		case "vars":
+			p.Vars = val
+		case "requiredTools":
+			val.Decode(&p.RequiredTools)
+		case "transformers":
+			p.Transformers = val
+		case "preCalls":
+			p.PreCalls = val
+		case "sessions":
+			p.Sessions = val
+		case "schema":
+			p.Schema = val
+		case "components":
+			p.Components = &ComponentsYAML{}
+			val.Decode(p.Components)
+		}
+	}
+	return nil
 }
 
 type ParameterYAML struct {
@@ -43,14 +75,14 @@ type CallYAML struct {
 }
 
 type SessionYAML struct {
-	DependsOn []*DependsOnYAML       `yaml:"dependsOn,omitempty"`
-	IterateOn string                 `yaml:"iterateOn,omitempty"`
-	Vars      *yaml.Node             `yaml:"vars,omitempty"`     // MappingNode
-	Tools     []*ToolYAML            `yaml:"tools,omitempty"`
-	PreCalls  *yaml.Node             `yaml:"preCalls,omitempty"` // SequenceNode
-	Context   *yaml.Node             `yaml:"context,omitempty"`
-	PrePrompt *yaml.Node             `yaml:"prePrompt,omitempty"`
-	Prompt    *yaml.Node             `yaml:"prompt,omitempty"`
+	DependsOn []*DependsOnYAML `yaml:"dependsOn,omitempty"`
+	IterateOn string           `yaml:"iterateOn,omitempty"`
+	Vars      *yaml.Node       `yaml:"vars,omitempty"` // MappingNode
+	Tools     []*ToolYAML      `yaml:"tools,omitempty"`
+	PreCalls  *yaml.Node       `yaml:"preCalls,omitempty"` // SequenceNode
+	Context   *yaml.Node       `yaml:"context,omitempty"`
+	PrePrompt *yaml.Node       `yaml:"prePrompt,omitempty"`
+	Prompt    *yaml.Node       `yaml:"prompt,omitempty"`
 }
 
 type DependsOnYAML struct {
@@ -61,6 +93,28 @@ type DependsOnYAML struct {
 type ComponentsYAML struct {
 	Schemas map[string]*JSONSchema `yaml:"schemas,omitempty"`
 	Prompts map[string]*yaml.Node  `yaml:"prompts,omitempty"`
+}
+
+func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		val := value.Content[i+1]
+		switch key {
+		case "schemas":
+			val.Decode(&c.Schemas)
+		case "prompts":
+			c.Prompts = make(map[string]*yaml.Node)
+			if val.Kind == yaml.MappingNode {
+				for j := 0; j < len(val.Content); j += 2 {
+					c.Prompts[val.Content[j].Value] = val.Content[j+1]
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // JSONSchema node with comment support for fields that aren't description-driven.

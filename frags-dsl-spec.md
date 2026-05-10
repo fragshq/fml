@@ -105,7 +105,7 @@ SystemBlock  ← "system" "(" STRING_LIT ")"
 
 # ── parameters ────────────────────────────────────────────────────────────────
 
-ParametersBlock ← "parameters" "{" ParamEntry* "}"
+ParametersBlock ← "parameters" "{" (ParamEntry (","? ParamEntry)*)? "}"
 
 ParamEntry   ← LeadingComment* IDENTIFIER ":" TypeExpr DefaultVal? INLINE_CMT? NEWLINE
 
@@ -189,7 +189,7 @@ InlineText   ← [^\n]+
 
 # ── schema (inside session or components) ─────────────────────────────────────
 
-SchemaBlock  ← "schema" "{" SchemaField* "}"
+SchemaBlock  ← "schema" "{" (SchemaField (","? SchemaField)*)? "}"
              / "schema" TypeExpr
 
 SchemaField  ← LeadingComment* IDENTIFIER "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
@@ -211,7 +211,7 @@ ScalarType   ← "string" | "int" | "float" | "bool" | "any"
 ArrayTypeSuffix  ← ScalarType "[]"                   # string[], int[]
 ArrayTypeBracket ← "[" TypeExpr "]"                  # [string], [{...}], [$ref]
 
-ObjectBody   ← "{" SchemaField* "}"                  # inline object
+ObjectBody   ← "{" (SchemaField (","? SchemaField)*)? "}"                  # inline object
 
 RefType      ← "$" IDENTIFIER                        # $ref to component schema
 

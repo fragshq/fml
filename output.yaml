@@ -31,7 +31,9 @@ sessions:
                 limit:
                     foo: bar
                 query: '{{ .params.topic }}'
-              code: args.query.split(' ').join('+')
+              code: |-
+                (args.query.split(' ').join('+'))
+                            whatever
               in: vars
               var: rawDocs
         prePrompt: |-

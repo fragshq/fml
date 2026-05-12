@@ -24,7 +24,7 @@ func TestLexer_BasicTokens(t *testing.T) {
 
 func TestLexer_PromptItem(t *testing.T) {
 	def := &FRAGSLexerDefinition{}
-	input := `- First line
+	input := `+ First line
   second line
 - Item 2`
 	l, err := def.Lex("test.frags", strings.NewReader(input))
@@ -33,7 +33,7 @@ func TestLexer_PromptItem(t *testing.T) {
 	tokens, err := lexer.ConsumeAll(l)
 	assert.NoError(t, err)
 
-	assert.Equal(t, -9, int(tokens[0].Type)) // PromptItem
+	assert.Equal(t, -13, int(tokens[0].Type)) // PrePromptItem
 	assert.Contains(t, tokens[0].Value, "First line")
 	assert.Contains(t, tokens[0].Value, "second line")
 

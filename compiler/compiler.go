@@ -376,7 +376,8 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		}
 	}
 
-	var promptItems []string
+	var prePrompts []string
+	var prompt *string
 
 	for _, stmt := range s.Statements {
 		switch {
@@ -397,7 +398,17 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		case stmt.Context != nil:
 			c.setNodeMapFieldNode(sessNode, "context", c.nodeValue(c.compileValue(stmt.Context.Value), stmt.Context.InlineComment))
 		case stmt.Prompt != nil:
-			promptItems = append(promptItems, stmt.Prompt.Items...)
+			for _, item := range stmt.Prompt.Items {
+				if item.PrePrompt != nil {
+					prePrompts = append(prePrompts, c.cleanPromptItem(*item.PrePrompt))
+				} else if item.Prompt != nil {
+					if prompt != nil {
+						return fmt.Errorf("session %q: only one prompt (-) allowed", s.Name)
+					}
+					p := c.cleanPromptItem(*item.Prompt)
+					prompt = &p
+				}
+			}
 		case stmt.Schema != nil:
 			compiled, err := c.compileType(stmt.Schema.Type)
 			if err != nil {
@@ -437,21 +448,16 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		}
 	}
 
-	if len(promptItems) > 0 {
-		cleaned := make([]string, len(promptItems))
-		for i, p := range promptItems {
-			cleaned[i] = c.cleanPromptItem(p)
-		}
-
-		if len(cleaned) == 1 {
-			c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(cleaned[0], nil))
-		} else if len(cleaned) == 2 {
-			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(cleaned[0], nil))
-			c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(cleaned[1], nil))
+	if len(prePrompts) > 0 {
+		if len(prePrompts) == 1 {
+			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(prePrompts[0], nil))
 		} else {
-			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(cleaned[:len(cleaned)-1], nil))
-			c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(cleaned[len(cleaned)-1], nil))
+			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(prePrompts, nil))
 		}
+	}
+
+	if prompt != nil {
+		c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(*prompt, nil))
 	}
 
 	return nil
@@ -574,23 +580,25 @@ func (c *Compiler) cleanPromptItem(s string) string {
 		return ""
 	}
 	first := lines[0]
-	i := strings.Index(first, "- ")
+	// Handle both + and - prefixes
+	i := strings.IndexAny(first, "+-")
 	if i != -1 {
-		first = first[i+2:]
-	} else if i = strings.Index(first, "-"); i != -1 {
-		first = first[i+1:]
+		if i+1 < len(first) && first[i+1] == ' ' {
+			first = first[i+2:]
+		} else {
+			first = first[i+1:]
+		}
 	}
 	var result []string
 	result = append(result, strings.TrimRight(first, " \t"))
 	if len(lines) > 1 {
 		fullFirst := lines[0]
-		indent := 0
-		for indent < len(fullFirst) && (fullFirst[indent] == ' ' || fullFirst[indent] == '\t') {
-			indent++
+		stripLen := 1
+		if len(fullFirst) > 1 && fullFirst[1] == ' ' {
+			stripLen = 2
 		}
-		stripLen := indent + 1
 		for _, line := range lines[1:] {
-			if len(line) > stripLen {
+			if len(line) >= stripLen {
 				result = append(result, strings.TrimRight(line[stripLen:], " \t"))
 			} else {
 				result = append(result, "")

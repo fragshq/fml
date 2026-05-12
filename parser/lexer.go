@@ -34,6 +34,7 @@ func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 		"Punct":         -7,
 		"Whitespace":    -8,
 		"PromptItem":    -9,
+		"PrePromptItem": -13,
 		"AttrValue":     -11,
 		"CodeValue":     -12,
 		"EOF":           -1,
@@ -57,8 +58,11 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			for i < len(l.s) && (l.s[i] == ' ' || l.s[i] == '\t') {
 				i++
 			}
-			if i < len(l.s) && l.s[i] == '-' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r') {
-				t, err := l.consumePromptItem(i)
+			isPrompt := i < len(l.s) && l.s[i] == '-' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r')
+			isPrePrompt := i < len(l.s) && l.s[i] == '+' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r')
+
+			if isPrompt || isPrePrompt {
+				t, err := l.consumePromptItem(i, isPrePrompt)
 				return t, err
 			}
 
@@ -253,6 +257,8 @@ func (l *fragsLexer) typeToToken(typ string) lexer.TokenType {
 		return -8
 	case "PromptItem":
 		return -9
+	case "PrePromptItem":
+		return -13
 	case "AttrValue":
 		return -11
 	case "CodeValue":
@@ -335,7 +341,7 @@ func (l *fragsLexer) consumeIdent() lexer.Token {
 	return l.consume(i, "Ident")
 }
 
-func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
+func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Token, error) {
 	startPos := l.pos
 	dashCol := indent + 1
 	i := 0
@@ -380,10 +386,15 @@ func (l *fragsLexer) consumePromptItem(indent int) (lexer.Token, error) {
 		return lexer.Token{}, fmt.Errorf("%s: malformed template tags in prompt item", startPos)
 	}
 
+	typ := -9
+	if isPrePrompt {
+		typ = -13
+	}
+
 	token := lexer.Token{
-		Type:  -9,
-		Value: val,
-		Pos:   l.pos,
+		Type:  lexer.TokenType(typ),
+		Value: val[indent:],
+		Pos:   lexer.Position{Filename: startPos.Filename, Line: startPos.Line, Column: startPos.Column + indent},
 	}
 
 	l.s = l.s[totalLen:]

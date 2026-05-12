@@ -162,7 +162,12 @@ type ContextStmt struct {
 
 // PromptLines represents a sequence of indentation-sensitive LLM prompt items.
 type PromptLines struct {
-	Items []string `@PromptItem+`
+	Items []*PromptLine `@@+`
+}
+
+type PromptLine struct {
+	PrePrompt *string `@PrePromptItem`
+	Prompt    *string `| @PromptItem`
 }
 
 // SchemaBlock defines the output structure of a session or component.

@@ -271,15 +271,15 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	if prePrompt != nil {
 		if prePrompt.Kind == yaml.SequenceNode {
 			for _, p := range prePrompt.Content {
-				d.writePromptItem(sb, p.Value)
+				d.writePromptItem(sb, p.Value, "+")
 			}
 		} else {
-			d.writePromptItem(sb, prePrompt.Value)
+			d.writePromptItem(sb, prePrompt.Value, "+")
 		}
 	}
 	prompt := d.getMapValue(sessNode, "prompt")
 	if prompt != nil {
-		d.writePromptItem(sb, prompt.Value)
+		d.writePromptItem(sb, prompt.Value, "-")
 	}
 
 	// Schema
@@ -308,12 +308,12 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	sb.WriteString("}\n")
 }
 
-func (d *Decompiler) writePromptItem(sb *strings.Builder, text string) {
+func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix string) {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
 	if len(lines) == 0 {
 		return
 	}
-	sb.WriteString(fmt.Sprintf("    - %s\n", strings.TrimSpace(lines[0])))
+	sb.WriteString(fmt.Sprintf("    %s %s\n", prefix, strings.TrimSpace(lines[0])))
 	for _, line := range lines[1:] {
 		sb.WriteString(fmt.Sprintf("      %s\n", strings.TrimSpace(line)))
 	}

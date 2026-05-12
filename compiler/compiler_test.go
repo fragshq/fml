@@ -384,3 +384,46 @@ session("s") {
 	assert.Equal(t, "db", c3.In)
 	assert.Equal(t, "var3", c3.Var)
 }
+
+func TestCompiler_Prompts(t *testing.T) {
+	input := `
+session("s") {
+  + pre1
+  + pre2
+  - prompt
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	sessNode := out.Sessions.Content[1]
+	var prePrompt, prompt *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "prePrompt" {
+			prePrompt = sessNode.Content[i+1]
+		} else if sessNode.Content[i].Value == "prompt" {
+			prompt = sessNode.Content[i+1]
+		}
+	}
+
+	require.NotNil(t, prePrompt)
+	assert.Equal(t, yaml.SequenceNode, prePrompt.Kind)
+	assert.Len(t, prePrompt.Content, 2)
+	assert.Equal(t, "pre1", prePrompt.Content[0].Value)
+	assert.Equal(t, "pre2", prePrompt.Content[1].Value)
+
+	require.NotNil(t, prompt)
+	assert.Equal(t, "prompt", prompt.Value)
+}
+
+func TestCompiler_MultiplePromptsError(t *testing.T) {
+	input := `
+session("s") {
+  - p1
+  - p2
+}
+`
+	_, err := compileSource(t, input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "only one prompt (-) allowed")
+}

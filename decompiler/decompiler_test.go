@@ -191,3 +191,25 @@ components:
 	assert.Contains(t, output, `schema("C1")`)
 	assert.Contains(t, output, `prompt("base")`)
 }
+
+func TestDecompiler_PrePrompt(t *testing.T) {
+	input := `session("s") {
+    + pre1
+    + pre2
+    - prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `+ pre1`)
+	assert.Contains(t, output, `+ pre2`)
+	assert.Contains(t, output, `- prompt`)
+}

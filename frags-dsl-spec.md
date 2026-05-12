@@ -178,18 +178,20 @@ ContextStmt  ← "context" (BOOL_LIT / STRING_LIT) NEWLINE
 
 # ── prompt lines ──────────────────────────────────────────────────────────────
 
-PromptLines  ← PromptItem+
+PromptLines  ← (PrePromptItem / PromptItem)+
 
-PromptItem   ← DashLine ContinuationLine*
+PrePromptItem ← PlusLine ContinuationLine*
+PromptItem    ← DashLine ContinuationLine*
 
+PlusLine     ← SP* "+" SP InlineText NEWLINE
 DashLine     ← SP* "-" SP InlineText NEWLINE
 
 # A continuation line must be indented strictly deeper than the column of
-# the "-" that opened the item. A BLANK_LINE terminates the item without
-# being consumed. A line at <= the "-" column terminates the item.
+# the "+" or "-" that opened the item. A BLANK_LINE terminates the item without
+# being consumed. A line at <= the opening column terminates the item.
 ContinuationLine ← !BLANK_LINE &DeepIndent InlineText NEWLINE
 
-DeepIndent   ← SP{n+1,}    # n = column index (0-based) of the opening "-"
+DeepIndent   ← SP{n+1,}    # n = column index (0-based) of the opening marker
 
 InlineText   ← [^\n]+
 
@@ -520,22 +522,22 @@ context: "Categories found: {{ .context.categories }}"
 ### 5.6 Prompt Lines
 
 Prompt lines are the only session statements that are order-sensitive relative to each other.
-They are introduced by `-` at the current indentation level.
+They are introduced by `+` for pre-prompts and `-` for the prompt, at the current indentation level.
 
 **Syntax:**
 
 ```
-- First line of a prompt item
++ First line of a pre-prompt item
   this line continues the item because it is indented deeper
   so does this one
 
-- This blank line above ended the previous item. This is item 2.
-- This is item 3 (the prompt).
++ This blank line above ended the previous item. This is pre-prompt 2.
+- This is the prompt.
 ```
 
 **Termination rules for a single item:**
 
-An item started by a `-` at column `c` (0-based) accumulates continuation lines as long as:
+An item started by a `+` or `-` at column `c` (0-based) accumulates continuation lines as long as:
 1. The next line is not blank, **and**
 2. The next line's leading whitespace is strictly greater than `c` spaces.
 
@@ -544,23 +546,25 @@ the terminating line).
 
 **Content assembly:**
 
-1. Take the text after `- ` on the dash line (trimmed of leading/trailing whitespace).
+1. Take the text after `+ ` or `- ` on the line (trimmed of leading/trailing whitespace).
 2. For each continuation line, strip the common leading indent (the `c+1` spaces that mark
    it as a continuation) and trim trailing whitespace.
 3. Join all lines with `\n`.
 
 **Compilation rules:**
 
-| Number of items | Output |
-|-----------------|--------|
-| 0 | Neither `prompt` nor `prePrompt` is emitted. |
-| 1 | `prompt: "<item>"` |
-| 2 | `prePrompt: "<item1>"` (string, not array), `prompt: "<item2>"` |
-| 3+ | `prePrompt: ["<item1>", "<item2>", ...]`, `prompt: "<lastItem>"` |
+- Lines starting with `+` compile to `prePrompt`.
+- The line starting with `-` compiles to `prompt`.
+- A session can have at most one `-` prompt line.
+- Multiple `+` pre-prompt lines are collected into a `prePrompt` array (or a single string if only one).
 
-The last item is always the `prompt`. All preceding items form `prePrompt`.
-When there are exactly 2 items, `prePrompt` is emitted as a plain string, not a
-single-element array.
+| Items | Output |
+|-------|--------|
+| 0 `-`, 0 `+` | Neither `prompt` nor `prePrompt` is emitted. |
+| 1 `-`, 0 `+` | `prompt: "<item>"` |
+| 0 `-`, 1 `+` | `prePrompt: "<item>"` |
+| 1 `-`, 1 `+` | `prePrompt: "<item1>"`, `prompt: "<item2>"` |
+| 1 `-`, 2+ `+` | `prePrompt: ["<item1>", "<item2>", ...]`, `prompt: "<lastItem>"` |
 
 ---
 

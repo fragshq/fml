@@ -100,3 +100,22 @@ require search`
 	assert.Equal(t, "tool1", *plan.Statements[0].Require.Name)
 	assert.True(t, plan.Statements[1].Require.Search)
 }
+
+func TestParser_PromptLines(t *testing.T) {
+	p, _ := NewParser()
+	input := `session("s") {
+  + pre1
+  + pre2
+  - prompt
+}`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	stmts := plan.Statements[0].Session.Statements
+	assert.Len(t, stmts, 1)
+	promptLines := stmts[0].Prompt
+	assert.Len(t, promptLines.Items, 3)
+	assert.Equal(t, "+ pre1", *promptLines.Items[0].PrePrompt)
+	assert.Equal(t, "+ pre2", *promptLines.Items[1].PrePrompt)
+	assert.Equal(t, "- prompt", *promptLines.Items[2].Prompt)
+}

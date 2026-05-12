@@ -19,6 +19,14 @@ type Statement struct {
 	Call        *CallBlock        `| @@`
 	Transformer *TransformerBlock `| @@`
 	Set         *SetStmt          `| @@`
+	Require     *RequireStmt      `| @@`
+}
+
+type RequireStmt struct {
+	Search        bool    `("require" @("search")`
+	Type          *string `| "require" @("mcp" | "apicp" | "collection" | "function")`
+	Name          *string `@Ident)`
+	InlineComment *string `@InlineComment?`
 }
 
 type SystemBlock struct {

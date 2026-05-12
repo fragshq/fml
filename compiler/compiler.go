@@ -65,6 +65,8 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 				c.output.Vars = &yaml.Node{Kind: yaml.MappingNode}
 			}
 			c.addNodeMapEntry(c.output.Vars, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment)
+		case stmt.Require != nil:
+			c.processRequire(stmt.Require)
 		case stmt.Call != nil:
 			callNode, err := c.compileCallNode(stmt.Call)
 			if err != nil {
@@ -115,8 +117,6 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 			rootSchema.Required = append(rootSchema.Required, propName)
 		}
 	}
-
-	c.finalizeRequiredTools()
 
 	if len(rootSchema.Properties) > 0 {
 		var schemaNode yaml.Node
@@ -236,6 +236,55 @@ func (c *Compiler) processTransformer(t *parser.TransformerBlock) error {
 	return nil
 }
 
+func (c *Compiler) processRequire(u *parser.RequireStmt) {
+	tool := &ToolYAML{}
+	if u.Search {
+		tool.Type = "internet_search"
+	} else {
+		if u.Type != nil {
+			tool.Type = *u.Type
+		}
+		if u.Name != nil {
+			tool.Name = *u.Name
+		}
+	}
+
+	// Register in root requiredTools
+	found := false
+	for _, t := range c.output.RequiredTools {
+		if t.Type == tool.Type && t.Name == tool.Name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.output.RequiredTools = append(c.output.RequiredTools, &ToolYAML{
+			Type: tool.Type,
+			Name: tool.Name,
+		})
+	}
+}
+
+func (c *Compiler) processUse(u *parser.UseStmt, sessNode *yaml.Node) {
+	tool := &ToolYAML{}
+	if u.Search {
+		tool.Type = "internet_search"
+	} else {
+		if u.Type != nil {
+			tool.Type = *u.Type
+		}
+		if u.Name != nil {
+			tool.Name = *u.Name
+		}
+	}
+
+	// If in a session, add to session tools
+	if sessNode != nil {
+		toolsNode := c.ensureNodeSeqField(sessNode, "tools")
+		toolsNode.Content = append(toolsNode.Content, c.nodeValue(tool, u.InlineComment))
+	}
+}
+
 func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 	if c.output.Components == nil {
 		c.output.Components = &ComponentsYAML{
@@ -337,19 +386,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			varsNode := c.ensureNodeMapField(sessNode, "vars")
 			c.addNodeMapEntry(varsNode, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment)
 		case stmt.Use != nil:
-			toolsNode := c.ensureNodeSeqField(sessNode, "tools")
-			tool := &ToolYAML{}
-			if stmt.Use.Search {
-				tool.Type = "internet_search"
-			} else {
-				if stmt.Use.Type != nil {
-					tool.Type = *stmt.Use.Type
-				}
-				if stmt.Use.Name != nil {
-					tool.Name = *stmt.Use.Name
-				}
-			}
-			toolsNode.Content = append(toolsNode.Content, c.nodeValue(tool, stmt.Use.InlineComment))
+			c.processUse(stmt.Use, sessNode)
 		case stmt.Call != nil:
 			callsNode := c.ensureNodeSeqField(sessNode, "preCalls")
 			callNode, err := c.compileCallNode(stmt.Call)
@@ -675,40 +712,4 @@ func (c *Compiler) isTypeArray(s *JSONSchema) bool {
 		}
 	}
 	return false
-}
-
-func (c *Compiler) finalizeRequiredTools() {
-	seen := make(map[string]bool)
-	for i := 1; i < len(c.output.Sessions.Content); i += 2 {
-		sessNode := c.output.Sessions.Content[i]
-		var toolsNode *yaml.Node
-		for j := 0; j < len(sessNode.Content); j += 2 {
-			if sessNode.Content[j].Value == "tools" {
-				toolsNode = sessNode.Content[j+1]
-				break
-			}
-		}
-		if toolsNode == nil {
-			continue
-		}
-		for _, tn := range toolsNode.Content {
-			var typeVal, nameVal string
-			for j := 0; j < len(tn.Content); j += 2 {
-				if tn.Content[j].Value == "type" {
-					typeVal = tn.Content[j+1].Value
-				}
-				if tn.Content[j].Value == "name" {
-					nameVal = tn.Content[j+1].Value
-				}
-			}
-			if typeVal == "internet_search" {
-				continue
-			}
-			key := fmt.Sprintf("%s:%s", typeVal, nameVal)
-			if !seen[key] {
-				c.output.RequiredTools = append(c.output.RequiredTools, &ToolYAML{Type: typeVal, Name: nameVal})
-				seen[key] = true
-			}
-		}
-	}
 }

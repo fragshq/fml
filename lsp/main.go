@@ -73,14 +73,14 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 
 	var items []lsp.CompletionItem
 
-	// 1. Tool types after "use"
-	if strings.HasSuffix(trimmedPrefix, "use") {
+	// 1. Tool types after "use" or "require"
+	if strings.HasSuffix(trimmedPrefix, "use") || strings.HasSuffix(trimmedPrefix, "require") {
 		items = []lsp.CompletionItem{
 			{Label: "mcp", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 			{Label: "apicp", Kind: ptr(lsp.CompletionItemKindEnumMember)},
-			{Label: "search", Kind: ptr(lsp.CompletionItemKindEnumMember)},
-			{Label: "function", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 			{Label: "collection", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+			{Label: "function", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+			{Label: "search", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 		}
 		return &lsp.CompletionList{Items: items}, nil
 	}
@@ -161,6 +161,7 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt."}},
 		{Label: "parameter", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "parameter(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an input parameter for the plan."}},
 		{Label: "transformer", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "transformer(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output transformer."}},
+		{Label: "require", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "require <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a global tool requirement for the plan."}},
 		{Label: "session", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "session(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a logical pipeline step."}},
 		{Label: "components", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "components { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines reusable schemas and prompts."}},
 		{Label: "set", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "set var = ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a variable."}},
@@ -214,7 +215,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 
 	keywords := map[string]int{
 		"system": 0, "parameter": 0, "transformer": 0, "call": 0, "session": 0,
-		"use": 0, "mcp": 0, "apicp": 0, "collection": 0, "function": 0, "search": 0,
+		"require": 0, "use": 0, "mcp": 0, "apicp": 0, "collection": 0, "function": 0, "search": 0,
 		"context": 0, "set": 0, "schema": 0, "components": 0, "prompt": 0, "code": 0,
 		"after": 0, "expect": 0, "iterate": 0, "target": 0, "type": 0, "default": 0, "title": 0,
 		"onFunctionOutput": 0, "onFunctionInput": 0, "onResource": 0, "jmesPath": 0, "parser": 0,
@@ -339,16 +340,84 @@ func (h *FMLHandler) diagnose(ctx context.Context, uri lsp.DocumentURI, text str
 }
 
 func (h *FMLHandler) Hover(ctx context.Context, params *lsp.HoverParams) (*lsp.Hover, error) {
-	// Simple keyword-based hover for demonstration
-	// In a real implementation, we would use the AST to find the symbol at the position
+	text, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return nil, nil
+	}
 
-	// For now, let's just return a placeholder or leave it as an exercise.
+	lines := strings.Split(text, "\n")
+	if int(params.Position.Line) >= len(lines) {
+		return nil, nil
+	}
+
+	line := lines[params.Position.Line]
+	pos := int(params.Position.Character)
+	if pos >= len(line) {
+		pos = len(line) - 1
+	}
+	if pos < 0 {
+		return nil, nil
+	}
+
+	// Extract the word under the cursor
+	start := pos
+	for start > 0 && isWordChar(line[start-1]) {
+		start--
+	}
+	end := pos
+	for end < len(line) && isWordChar(line[end]) {
+		end++
+	}
+
+	// Also check if we have a trailing '?' for schema?
+	word := line[start:end]
+	if end < len(line) && line[end] == '?' && word == "schema" {
+		word = "schema?"
+	}
+
+	doc, ok := languageDocs[word]
+	if !ok {
+		return nil, nil
+	}
+
 	return &lsp.Hover{
 		Contents: lsp.MarkupContent{
 			Kind:  lsp.Markdown,
-			Value: "FML Language Server: Hover support active.",
+			Value: doc,
+		},
+		Range: &lsp.Range{
+			Start: lsp.Position{Line: params.Position.Line, Character: start},
+			End:   lsp.Position{Line: params.Position.Line, Character: end},
 		},
 	}, nil
+}
+
+func isWordChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+var languageDocs = map[string]string{
+	"system":      "**system(\"prompt\")**\n\nSets the global system prompt for the entire plan. This prompt provides high-level instructions to the LLM across all sessions.",
+	"parameter":   "**parameter(\"name\", ...)**\n\nDefines a named input parameter for the plan. Parameters can have a `type`, a `default` value, and a `title`.",
+	"type":        "**type=...**\n\nSpecifies the data type for a parameter or field. Supports `string`, `int`, `float`, `bool`, `any`, and array suffixes (e.g., `string[]`).",
+	"default":     "**default=...**\n\nSpecifies the default value for a parameter if no value is provided during plan execution.",
+	"title":       "**title=\"...\"**\n\nSpecifies a human-readable title for a parameter, used for UI display or documentation generation.",
+	"require":     "**require <type> <name>**\n\nDeclares a global tool requirement for the plan. Supported types: `mcp`, `apicp`, `collection`, `function`, `search`.",
+	"session":     "**session(\"name\", ...)**\n\nDefines a logical pipeline step (session). Each session can have its own context, tools, calls, and output schema.",
+	"after":       "**after=\"session_name\"**\n\nSpecifies that this session should run after the named session. Acts as both an ordering constraint and a success gate.",
+	"expect":      "**expect=expression**\n\nSpecifies a conditional expression that must evaluate to true for the session to execute.",
+	"iterate":     "**iterate=expression**\n\nSpecifies an expression that returns a collection. The session will be executed once for each item in the collection.",
+	"target":      "**target=\"name\"**\n\nOverrides the default property name in the root output schema for this session's results.",
+	"use":         "**use <type> <name>**\n\nDeclares a tool requirement for the session. Supported types: `mcp`, `apicp`, `collection`, `function`, `search`.",
+	"call":        "**call(\"name\") -> [ns:]var { ... }**\n\nInvokes a tool or transformer. The output can be optionally mapped to a variable in a specific namespace (defaulting to `vars`).",
+	"context":     "**context ...**\n\nSets the prompt context for the session. Can be a boolean or a string template.",
+	"schema":      "**schema { ... }** or **schema Type**\n\nDefines the output structure for the session. Properties are merged into the session's object if using the `{}` syntax.",
+	"schema?":     "**schema? ...**\n\nDefines an optional output structure. The session's property will not be marked as required in the root schema.",
+	"set":         "**set var = value**\n\nDeclares a variable at the plan level or within a session.",
+	"transformer": "**transformer(\"name\") { ... }**\n\nDefines a reusable output transformer that can be triggered by tool inputs or outputs.",
+	"components":  "**components { ... }**\n\nDefines reusable schemas and prompt templates that can be referenced elsewhere in the plan.",
+	"prompt":      "**prompt(\"name\") { \"...\" }**\n\nDefines a reusable prompt component within the `components` block.",
+	"code":        "**code( ... )**\n\nExecutes custom JavaScript code for post-processing tool results or transformer logic.",
 }
 
 func ptr[T any](v T) *T {

@@ -30,7 +30,6 @@
 8. [Compiler Output Rules](#8-compiler-output-rules)
    - 8.1 Plan-level fields
    - 8.2 `parameters`
-   - 8.3 `requiredTools` inference
    - 8.4 Sessions
    - 8.5 `preCalls`
    - 8.6 `transformers`
@@ -98,6 +97,11 @@ Statement    ← COMMENT
              / CallBlock
              / TransformerBlock
              / SetStmt
+             / RequireStmt
+
+# ── require (plan-level) ──────────────────────────────────────────────────────
+
+RequireStmt  ← "require" ToolType IDENTIFIER? NEWLINE
 
 # ── system ────────────────────────────────────────────────────────────────────
 
@@ -477,17 +481,15 @@ use function custom_fn
 **Compilation rules:**
 
 - Each `use` statement adds an entry to the session's `tools` array.
-- For every `use` except `use search`, the compiler also adds the tool to the plan-level
-  `requiredTools` array (deduplicated by `type` + `name`).
-- `use search` is **never** added to `requiredTools`.
 
-| DSL | Session `tools` entry | Added to `requiredTools`? |
-|-----|-----------------------|--------------------------|
-| `use mcp name` | `{type: mcp, name: name}` | Yes |
-| `use apicp name` | `{type: apicp, name: name}` | Yes |
-| `use collection name` | `{type: collection, name: name}` | Yes |
-| `use function name` | `{type: function, name: name}` | Yes |
-| `use search` | `{type: internet_search}` | No |
+| DSL | Session `tools` entry |
+|-----|-----------------------|
+| `use mcp name` | `{type: mcp, name: name}` |
+| `use apicp name` | `{type: apicp, name: name}` |
+| `use collection name` | `{type: collection, name: name}` |
+| `use function name` | `{type: function, name: name}` |
+| `use search` | `{type: internet_search}` |
+
 
 ---
 
@@ -693,32 +695,24 @@ schema: {...}
 components: {...}
 ```
 
-Fields with no content are omitted entirely.
+**`requiredTools` assembly:**
+
+- Each top-level `require` statement adds an entry to the `requiredTools` array.
+- Session-level `use` statements **do not** automatically populate `requiredTools`.
+
+| DSL | `requiredTools` entry |
+|-----|-----------------------|
+| `require mcp name` | `{type: mcp, name: name}` |
+| `require apicp name` | `{type: apicp, name: name}` |
+| `require collection name` | `{type: collection, name: name}` |
+| `require function name` | `{type: function, name: name}` |
+| `require search` | `{type: internet_search}` |
 
 ---
 
 ### 8.2 `parameters`
 
 See §4.2. Each parameter entry is emitted in declaration order.
-
----
-
-### 8.3 `requiredTools` inference
-
-The compiler collects all `use` statements across all sessions and builds `requiredTools`
-automatically. Rules:
-
-- Deduplicate by `(type, name)` pair.
-- `use search` is never included.
-- Order: first occurrence order across sessions (top-to-bottom, in the order sessions appear).
-
-```yaml
-requiredTools:
-  - name: salesforce
-    type: mcp
-  - name: my_api
-    type: apicp
-```
 
 ---
 

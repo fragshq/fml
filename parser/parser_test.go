@@ -87,3 +87,16 @@ func TestParser_SessionTarget(t *testing.T) {
 	assert.Equal(t, "target", attr.Type)
 	assert.Equal(t, "output", attr.Value)
 }
+
+func TestParser_RootRequire(t *testing.T) {
+	p, _ := NewParser()
+	input := `require mcp tool1
+require search`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	assert.Len(t, plan.Statements, 2)
+	assert.NotNil(t, plan.Statements[0].Require)
+	assert.Equal(t, "tool1", *plan.Statements[0].Require.Name)
+	assert.True(t, plan.Statements[1].Require.Search)
+}

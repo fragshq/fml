@@ -41,6 +41,17 @@ func (d *Decompiler) Decompile() (string, error) {
 		sb.WriteString("\n")
 	}
 
+	if d.plan.RequiredTools != nil && len(d.plan.RequiredTools) > 0 {
+		for _, tool := range d.plan.RequiredTools {
+			if tool.Type == "internet_search" {
+				sb.WriteString("require search\n")
+			} else {
+				sb.WriteString(fmt.Sprintf("require %s %s\n", tool.Type, tool.Name))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
 	if d.plan.Transformers != nil && len(d.plan.Transformers.Content) > 0 {
 		for _, tNode := range d.plan.Transformers.Content {
 			d.writeTransformer(&sb, tNode)

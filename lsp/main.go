@@ -97,13 +97,48 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 		return &lsp.CompletionList{Items: items}, nil
 	}
 
-	// 3. Session Attributes inside session header
-	if strings.HasPrefix(trimmedPrefix, "session") && strings.Contains(prefix, "(") && !strings.Contains(prefix, ")") {
+	// 3. Session and Parameter Attributes
+	if (strings.HasPrefix(trimmedPrefix, "session") || strings.HasPrefix(trimmedPrefix, "parameter")) &&
+		strings.Contains(prefix, "(") && !strings.Contains(prefix, ")") {
+
+		if strings.HasPrefix(trimmedPrefix, "session") {
+			items = []lsp.CompletionItem{
+				{Label: "after=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., after=\"...\")"},
+				{Label: "expect=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., expect=...)"},
+				{Label: "iterate=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., iterate=...)"},
+				{Label: "target=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., target=\"...\")"},
+			}
+		} else {
+			items = []lsp.CompletionItem{
+				{Label: "type=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., type=...)"},
+				{Label: "default=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., default=...)"},
+				{Label: "title=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., title=\"...\")"},
+			}
+		}
+		return &lsp.CompletionList{Items: items}, nil
+	}
+
+	// 3.1 Transformer Fields
+	if strings.HasPrefix(trimmedPrefix, "transformer") || (len(prefix) > 0 && (prefix[0] == ' ' || prefix[0] == '\t')) {
+		// Check if we are likely inside a transformer block
+		// This is a heuristic as we don't have a full AST-based position resolver yet
+		items = append(items, []lsp.CompletionItem{
+			{Label: "onFunctionOutput =", Kind: ptr(lsp.CompletionItemKindProperty)},
+			{Label: "onFunctionInput =", Kind: ptr(lsp.CompletionItemKindProperty)},
+			{Label: "onResource =", Kind: ptr(lsp.CompletionItemKindProperty)},
+			{Label: "jmesPath =", Kind: ptr(lsp.CompletionItemKindProperty)},
+			{Label: "parser =", Kind: ptr(lsp.CompletionItemKindProperty)},
+			{Label: "code", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "code( ... )", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "JS post-processing code."}},
+		}...)
+	}
+
+	// 3.2 Parser values after "parser ="
+	if strings.HasSuffix(trimmedPrefix, "parser =") || strings.HasSuffix(trimmedPrefix, "parser = ") {
 		items = []lsp.CompletionItem{
-			{Label: "after=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., after=\"...\")"},
-			{Label: "expect=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., expect=...)"},
-			{Label: "iterate=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., iterate=...)"},
-			{Label: "target=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "session(..., target=\"...\")"},
+			{Label: "json", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+			{Label: "csv", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+			{Label: "\"json\"", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+			{Label: "\"csv\"", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 		}
 		return &lsp.CompletionList{Items: items}, nil
 	}
@@ -115,6 +150,7 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 			{Label: "call", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "call(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Invokes a tool or function."}},
 			{Label: "context", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "context ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the session context."}},
 			{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines the output structure for the session."}},
+			{Label: "schema?", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema? { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an optional output structure for the session."}},
 			{Label: "set", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "set var = ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a variable."}},
 		}
 		return &lsp.CompletionList{Items: items}, nil
@@ -123,7 +159,7 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 	// 5. Top-level blocks (not indented)
 	items = []lsp.CompletionItem{
 		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt."}},
-		{Label: "parameters", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "parameters { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines input parameters for the plan."}},
+		{Label: "parameter", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "parameter(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an input parameter for the plan."}},
 		{Label: "transformer", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "transformer(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output transformer."}},
 		{Label: "session", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "session(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a logical pipeline step."}},
 		{Label: "components", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "components { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines reusable schemas and prompts."}},
@@ -177,12 +213,14 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 	lastChar := 0
 
 	keywords := map[string]int{
-		"system": 0, "parameters": 0, "transformer": 0, "call": 0, "session": 0,
+		"system": 0, "parameter": 0, "transformer": 0, "call": 0, "session": 0,
 		"use": 0, "mcp": 0, "apicp": 0, "collection": 0, "function": 0, "search": 0,
 		"context": 0, "set": 0, "schema": 0, "components": 0, "prompt": 0, "code": 0,
-		"after": 0, "expect": 0, "iterate": 0, "target": 0, "onFunctionOutput": 0, "onFunctionInput": 0,
-		"onResource": 0, "jmesPath": 0, "true": 0, "false": 0,
+		"after": 0, "expect": 0, "iterate": 0, "target": 0, "type": 0, "default": 0, "title": 0,
+		"onFunctionOutput": 0, "onFunctionInput": 0, "onResource": 0, "jmesPath": 0, "parser": 0,
+		"true": 0, "false": 0,
 		"string": 4, "int": 4, "float": 4, "bool": 4, "any": 4,
+		"json": 1, "csv": 1,
 	}
 
 	for {

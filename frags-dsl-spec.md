@@ -92,7 +92,7 @@ Plan         ← Statement* EOF
 
 Statement    ← COMMENT
              / SystemBlock
-             / ParametersBlock
+             / ParameterBlock
              / ComponentsBlock
              / SessionBlock
              / CallBlock
@@ -105,11 +105,11 @@ SystemBlock  ← "system" "(" STRING_LIT ")"
 
 # ── parameters ────────────────────────────────────────────────────────────────
 
-ParametersBlock ← "parameters" "{" (ParamEntry (","? ParamEntry)*)? "}"
+ParameterBlock ← "parameter" "(" STRING_LIT ("," ParameterAttr)* ")"
 
-ParamEntry   ← LeadingComment* IDENTIFIER ":" TypeExpr DefaultVal? INLINE_CMT? NEWLINE
-
-DefaultVal   ← "=" LiteralValue
+ParameterAttr  ← "type"    "=" TypeExpr
+               / "default" "=" LiteralValue
+               / "title"   "=" STRING_LIT
 
 # ── transformer ───────────────────────────────────────────────────────────────
 
@@ -117,6 +117,8 @@ TransformerBlock ← "transformer" "(" STRING_LIT ")" "{" TransformerField* "}"
 
 TransformerField ← TransformerTrigger "=" STRING_LIT NEWLINE
                  / "jmesPath"         "=" STRING_LIT NEWLINE
+                 / "parser"           "=" ("json" | "csv" | "\"json\"" | "\"csv\"") NEWLINE
+                 / CodeBlock NEWLINE
 
 TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
@@ -189,8 +191,8 @@ InlineText   ← [^\n]+
 
 # ── schema (inside session or components) ─────────────────────────────────────
 
-SchemaBlock  ← "schema" "{" (SchemaField (","? SchemaField)*)? "}"
-             / "schema" TypeExpr
+SchemaBlock  ← "schema" "?"? "{" (SchemaField (","? SchemaField)*)? "}"
+             / "schema" "?"? TypeExpr
 
 SchemaField  ← LeadingComment* IDENTIFIER "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
              / LeadingComment* IDENTIFIER "?"? ":" ObjectBody                 INLINE_CMT? NEWLINE
@@ -199,17 +201,16 @@ InlineSchemaExt ← "{" SchemaField* "}"   # for inline object expansion after "
 
 # ── types ─────────────────────────────────────────────────────────────────────
 
-TypeExpr     ← ArrayTypeSuffix
-             / ArrayTypeBracket
-             / ObjectBody
+TypeExpr     ← TypeBase ArraySuffix?
+
+ArraySuffix  ← "[]"
+
+TypeBase     ← ObjectBody
              / RefType
              / EnumType
              / ScalarType
 
 ScalarType   ← "string" | "int" | "float" | "bool" | "any"
-
-ArrayTypeSuffix  ← ScalarType "[]"                   # string[], int[]
-ArrayTypeBracket ← "[" TypeExpr "]"                  # [string], [{...}], [$ref]
 
 ObjectBody   ← "{" (SchemaField (","? SchemaField)*)? "}"                  # inline object
 
@@ -253,51 +254,44 @@ systemPrompt: "You are a precise, structured content generator."
 
 ---
 
-### 4.2 `parameters`
+### 4.2 `parameter`
 
-Each entry declares a named input parameter with a type and optional default value.
+Each statement declares a named input parameter with a type and optional default value and title.
 
 ```
-parameters {
-    topic:      string
-    max_items:  int = 10
-    # The user's full name
-    full_name:  string = "Anonymous"
-    tags:       [string]
-    address: {
-        street: string
-        city:   string
-    }
-}
+parameter("topic", type=string, title="Research Topic")
+parameter("max_items", type=int, default=10, title="Maximum Results")
+# The user's full name
+parameter("full_name", type=string, default="Anonymous")
 ```
 
 **Compilation rules:**
 
-- Each entry becomes one element of the `parameters` array.
-- The `name` field is the identifier.
-- The `schema` field is the compiled JSON Schema for the type (see §6).
-- If a `default` is present, emit `default: <value>`.
-- The `?` optional marker is **not** valid on parameters (parameters are either required
-  or have a default; omitting `?` and omitting a default makes the parameter required).
-- A leading comment on the line immediately above the entry becomes the parameter's
+- Each statement becomes one element of the top-level `parameters` array.
+- The `name` field is the first string argument.
+- The `schema` field is the compiled JSON Schema for the `type` attribute.
+- If `default` is present, it is emitted **inside** the `schema` field.
+- If `title` is present, it is emitted **inside** the `schema` field.
+- A leading comment on the line immediately above the statement becomes the parameter's
   `description` field inside `schema`.
-- An inline comment on the same line as the entry also becomes `description`; if both
-  leading and inline are present, the inline comment wins.
+- An inline comment on the same line as the statement also becomes `description`.
 
 ```yaml
 parameters:
   - name: topic
     schema:
       type: string
+      title: "Research Topic"
   - name: max_items
     schema:
       type: integer
-    default: 10
+      title: "Maximum Results"
+      default: 10
   - name: full_name
     schema:
       type: string
       description: "The user's full name"
-    default: "Anonymous"
+      default: "Anonymous"
   - name: tags
     schema:
       type: array
@@ -320,18 +314,26 @@ parameters:
 transformer("slimRepos") {
     onFunctionOutput = "listRepositories"
     jmesPath         = "[*].{name: name, url: html_url}"
+    parser           = "json"
+    code(
+        output.map(r => ({...r, id: r.name}))
+    )
 }
 ```
 
-**Trigger field mapping:**
+**Field mapping:**
 
-| DSL field | YAML field |
-|-----------|-----------|
-| `onFunctionOutput` | `onFunctionOutput` |
-| `onFunctionInput` | `onFunctionInput` |
-| `onResource` | `onResource` |
+| DSL field | YAML field | Notes |
+|-----------|------------|-------|
+| `onFunctionOutput` | `onFunctionOutput` | Trigger field |
+| `onFunctionInput`  | `onFunctionInput`  | Trigger field |
+| `onResource`       | `onResource`       | Trigger field |
+| `jmesPath`         | `jmesPath`         | Required |
+| `parser`           | `parser`           | Optional: "json" or "csv" |
+| `code(...)`        | `code`             | Optional JS post-processing |
 
 Exactly one trigger field must be present. `jmesPath` is always required.
+If `code(...)` is present, it is executed after the `jmesPath` transformation.
 
 ```yaml
 transformers:
@@ -577,7 +579,7 @@ session is responsible for filling.
 - This property is named after the session (e.g., `session("mySess")` → property `mySess`).
 - The property is annotated with `x-session: <sessionName>`.
 - The property is added to the root schema's `required` array unless the schema block
-  is anonymous and marked optional (`schema Type?`).
+  is anonymous and marked optional (`schema? Type`).
 - If `iterate` is set on the session, the property's type is automatically wrapped in an
   `array` if it isn't already one.
 - Multiple `schema` blocks within the same session are merged into the same session-named
@@ -599,13 +601,12 @@ supported:
 | `float` | number (floating point) |
 | `bool` | boolean |
 | `any` | empty schema `{}` |
-| `T[]` | array of T (suffix notation) |
-| `[T]` | array of T (bracket notation) |
-| `[{...}]` | array of inline object |
+| `T[]` | array of T |
+| `{...}[]` | array of inline object |
 | `{...}` | inline object |
 | `$Name` | `$ref: '#/components/schemas/Name'` |
 | `a\|b\|c` | enum with values a, b, c |
-| `T?` | T, but field is excluded from parent `required` |
+| `field?: T` | Field is excluded from parent `required` |
 
 **JSON Schema mapping:**
 
@@ -616,8 +617,8 @@ supported:
 | `float` | `{type: number}` |
 | `bool` | `{type: boolean}` |
 | `any` | `{}` |
-| `string[]` or `[string]` | `{type: array, items: {type: string}}` |
-| `[{f: string}]` | `{type: array, items: {type: object, properties: {f: {type: string}}, required: [f]}}` |
+| `string[]` | `{type: array, items: {type: string}}` |
+| `{f: string}[]` | `{type: array, items: {type: object, properties: {f: {type: string}}, required: [f]}}` |
 | `{f: string}` | `{type: object, properties: {f: {type: string}}, required: [f]}` |
 | `go\|no_go` | `{enum: [go, no_go]}` |
 | `"a"\|"b"` | `{enum: [a, b]}` |
@@ -657,15 +658,13 @@ field, the comment becomes the `description` property of that field's JSON Schem
 ```
 # This becomes a YAML comment (not adjacent to any field)
 
-parameters {
-    # The user's given name
-    first_name: string          # inline wins → description: "inline wins"
+# The user's given name
+parameter("first_name", type=string) # inline wins → description: "inline wins"
 
-    # This is the description
-    last_name: string
+# This is the description
+parameter("last_name", type=string)
 
-    age: int  # age in years   → description: "age in years"
-}
+parameter("age", type=int) # age in years   → description: "age in years"
 ```
 
 Leading comment lines are stripped of the `# ` prefix and trimmed before being used as
@@ -825,7 +824,7 @@ Session `gather` declares:
 schema {
     overview: {
         summary:    string
-        keyPoints:  [string]
+        keyPoints:  string[]
     }
 }
 ```
@@ -894,11 +893,9 @@ components:
 ```
 system("You are a precise research assistant.")
 
-parameters {
-    topic:    string
-    # Maximum number of results to return
-    max_results: int = 5
-}
+parameter("topic", type=string)
+# Maximum number of results to return
+parameter("max_results", type=int, default=5)
 
 set defaultRegion = "eu-west"
 
@@ -934,7 +931,7 @@ components {
     schema("SourceRef") {
         id:    string
         title: string
-        url:   string?
+        url?:  string
     }
 }
 
@@ -944,8 +941,8 @@ session("gather") {
     schema {
         overview: {
             summary:   string
-            keyPoints: [string]
-            sources:   [$SourceRef]
+            keyPoints: string[]
+            sources:   $SourceRef[]
         }
     }
 }
@@ -954,17 +951,12 @@ session("elaborate") {
     schema {
         details: {
             # Expanded explanation per key point
-            explanations: [string]
-            confidence:   float?
+            explanations: string[]
+            confidence?:  float
         }
     }
 }
 ```
-
-> **Note:** In a real plan, each session is declared once; schema blocks are included inside
-> their session. They are shown separately above only for illustration. The compiler merges
-> multiple blocks for the same session name (schema block may appear anywhere inside the
-> session body).
 
 ### YAML output
 
@@ -979,7 +971,7 @@ parameters:
     schema:
       type: integer
       description: "Maximum number of results to return"
-    default: 5
+      default: 5
 
 vars:
   defaultRegion: "eu-west"

@@ -13,7 +13,7 @@ type Plan struct {
 type Statement struct {
 	Comment     *string           `@Comment`
 	System      *SystemBlock      `| @@`
-	Parameters  *ParametersBlock  `| @@`
+	Parameter   *ParameterBlock   `| @@`
 	Components  *ComponentsBlock  `| @@`
 	Session     *SessionBlock     `| @@`
 	Call        *CallBlock        `| @@`
@@ -26,18 +26,17 @@ type SystemBlock struct {
 	InlineComment *string `@InlineComment?`
 }
 
-type ParametersBlock struct {
-	Entries       []*ParamEntry `"parameters" "{" (@@ (","? @@)*)? "}"`
-	InlineComment *string       `@InlineComment?`
+type ParameterBlock struct {
+	LeadingComments []string         `@Comment*`
+	Name            string           `"parameter" "(" @String`
+	Attributes      []*ParameterAttr `("," @@)* ")" `
+	InlineComment   *string          `@InlineComment?`
 }
 
-// ParamEntry defines a single input parameter with optional documentation and default values.
-type ParamEntry struct {
-	LeadingComments []string  `@Comment*`
-	Name            string    `@Ident ":"`
-	Type            *TypeExpr `@@`
-	Default         *Value    `("=" @@)?`
-	InlineComment   *string   `@InlineComment?`
+type ParameterAttr struct {
+	Type    *TypeExpr `( "type" "=" @@`
+	Default *Value    `| "default" "=" @@`
+	Title   *string   `| "title" "=" @String )`
 }
 
 type TransformerBlock struct {
@@ -50,6 +49,8 @@ type TransformerField struct {
 	TriggerType   *string `(@("onFunctionOutput" | "onFunctionInput" | "onResource")`
 	TriggerValue  *string `"=" @String)`
 	JMESPath      *string `| ("jmesPath" "=" @String)`
+	Parser        *string `| ("parser" "=" @("json" | "csv" | String))`
+	Code          *string `| ("code" "(" @CodeValue ")")`
 	InlineComment *string `@InlineComment?`
 }
 
@@ -158,9 +159,9 @@ type PromptLines struct {
 
 // SchemaBlock defines the output structure of a session or component.
 type SchemaBlock struct {
-	Fields        []*SchemaField `("schema" "{" (@@ (","? @@)*)? "}")`
-	Type          *TypeExpr      `| ("schema" @@)`
-	InlineComment *string        `@InlineComment?`
+	Optional      bool      `"schema" @("?")?`
+	Type          *TypeExpr `@@`
+	InlineComment *string   `@InlineComment?`
 }
 
 type SchemaField struct {
@@ -173,14 +174,12 @@ type SchemaField struct {
 
 // TypeExpr is the unified type representation, supporting scalars, arrays, objects, and refs.
 type TypeExpr struct {
-	Base     *TypeBase `@@`
-	Suffix   bool      `@("[" "]")?`
-	Optional bool      `@("?")?`
+	Base   *TypeBase `@@`
+	Suffix bool      `@("[" "]")?`
 }
 
 type TypeBase struct {
 	Scalar *string     `@("string" | "int" | "float" | "bool" | "any")`
-	Array  *TypeExpr   `| "[" @@ "]"`
 	Object *ObjectBody `| @@`
 	Ref    *string     `| "$" @Ident`
 	Enum   []string    `| (@(Ident|String) ("|" @(Ident|String))* )`

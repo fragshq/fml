@@ -25,7 +25,7 @@ The lexer uses a state-machine approach to handle complex DSL constructs:
 The compiler implements a unique grouping strategy for the output JSON Schema:
 - **Session Grouping**: Each session (e.g., `session("gather")`) contributes a single top-level property to the root schema, named after the session itself (or overridden via `target=`).
 - **Iteration Handling**: If a session has an `iterate` attribute, its corresponding root property is automatically wrapped in a JSON Schema `array` type.
-- **Flattening & Merging**: Multiple `schema` blocks within a session are merged into the session's object-type property. Anonymous schemas (`schema [T]`) directly set the session's property type.
+- **Flattening & Merging**: Multiple `schema` blocks within a session are merged into the session's object-type property. Anonymous schemas (`schema T[]`) directly set the session's property type.
 
 ### Comment & Metadata Preservation
 - **Preservation Rule**: Comments adjacent to fields are prioritized as JSON Schema `description` fields.
@@ -37,6 +37,7 @@ The compiler implements a unique grouping strategy for the output JSON Schema:
 - Always refer to `frags-dsl-spec.md` for the authoritative PEG grammar and compilation rules.
 - **Key Features**:
     - `system("...")`: Sets the global system prompt.
+    - `parameter("name", type=..., default=..., title=...)`: Defines an input parameter.
     - `transformer("name") { ... }`: Defines reusable output transformers.
     - `call("tool") -> [ns:]var { ... }`: Tool invocations with namespaced argument mapping.
     - `session("name", after="prev", expect=...) { ... }`: Sequential pipeline steps.

@@ -26,11 +26,10 @@ func (d *Decompiler) Decompile() (string, error) {
 	}
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {
-		sb.WriteString("parameters {\n")
 		for _, pNode := range d.plan.Parameters.Content {
 			d.writeParameter(&sb, pNode)
 		}
-		sb.WriteString("}\n\n")
+		sb.WriteString("\n")
 	}
 
 	if d.plan.Vars != nil && len(d.plan.Vars.Content) > 0 {
@@ -71,9 +70,13 @@ func (d *Decompiler) Decompile() (string, error) {
 	// Session processing
 	if d.plan.Sessions != nil && len(d.plan.Sessions.Content) > 0 {
 		sessionSchemas := make(map[string]map[string]*compiler.JSONSchema)
+		requiredProps := make(map[string]bool)
 		if d.plan.Schema != nil {
 			var rootSchema compiler.JSONSchema
 			d.plan.Schema.Decode(&rootSchema)
+			for _, r := range rootSchema.Required {
+				requiredProps[r] = true
+			}
 			for propName, s := range rootSchema.Properties {
 				if s.XSession != "" {
 					if _, ok := sessionSchemas[s.XSession]; !ok {
@@ -87,7 +90,7 @@ func (d *Decompiler) Decompile() (string, error) {
 		for i := 0; i < len(d.plan.Sessions.Content); i += 2 {
 			name := d.plan.Sessions.Content[i].Value
 			sessNode := d.plan.Sessions.Content[i+1]
-			d.writeSession(&sb, name, sessNode, sessionSchemas[name])
+			d.writeSession(&sb, name, sessNode, sessionSchemas[name], requiredProps)
 			sb.WriteString("\n")
 		}
 	}
@@ -98,7 +101,7 @@ func (d *Decompiler) Decompile() (string, error) {
 func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) {
 	if node.HeadComment != "" {
 		for _, line := range strings.Split(node.HeadComment, "\n") {
-			sb.WriteString(fmt.Sprintf("    # %s\n", line))
+			sb.WriteString(fmt.Sprintf("# %s\n", line))
 		}
 	}
 
@@ -107,17 +110,24 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) {
 	var schema compiler.JSONSchema
 	schemaNode.Decode(&schema)
 
-	sb.WriteString(fmt.Sprintf("    %s: %s", name, d.formatType(&schema)))
+	sb.WriteString(fmt.Sprintf("parameter(%q, type=%s", name, d.formatType(&schema)))
 
-	defaultNode := d.getMapValue(node, "default")
-	if defaultNode != nil {
-		sb.WriteString(fmt.Sprintf(" = %s", d.formatValue(defaultNode)))
+	if schema.Default != nil {
+		// We need to format the default value. Since it's interface{}, we can encode it to a node first.
+		var defNode yaml.Node
+		defNode.Encode(schema.Default)
+		sb.WriteString(fmt.Sprintf(", default=%s", d.formatValue(&defNode)))
 	}
+
+	if schema.Title != "" {
+		sb.WriteString(fmt.Sprintf(", title=%q", schema.Title))
+	}
+
+	sb.WriteString(")")
 
 	if node.LineComment != "" {
 		sb.WriteString(fmt.Sprintf(" # %s", node.LineComment))
 	} else if schema.Description != "" {
-		// If description matches what would be a comment
 		sb.WriteString(fmt.Sprintf(" # %s", schema.Description))
 	}
 	sb.WriteString("\n")
@@ -139,10 +149,21 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) {
 	if v := d.getMapValue(node, "jmesPath"); v != nil {
 		sb.WriteString(fmt.Sprintf("    jmesPath = %q\n", v.Value))
 	}
+	if v := d.getMapValue(node, "parser"); v != nil {
+		val := v.Value
+		if val == "json" || val == "csv" {
+			sb.WriteString(fmt.Sprintf("    parser = %s\n", val))
+		} else {
+			sb.WriteString(fmt.Sprintf("    parser = %q\n", val))
+		}
+	}
+	if v := d.getMapValue(node, "code"); v != nil {
+		sb.WriteString(fmt.Sprintf("    code( %s )\n", v.Value))
+	}
 	sb.WriteString("}\n")
 }
 
-func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema) {
+func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) {
 	sb.WriteString(fmt.Sprintf("session(%q", name))
 
 	if len(schemas) == 1 {
@@ -253,16 +274,22 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	// Schema
 	if len(schemas) > 0 {
 		isIterated := it != nil
-		for _, s := range schemas {
+		for propName, s := range schemas {
 			if isIterated && s.Type == "array" && s.Items != nil {
 				s = s.Items
 			}
+
+			opt := ""
+			if !requiredProps[propName] {
+				opt = "?"
+			}
+
 			if s.Type == "object" && len(s.Properties) > 0 {
-				sb.WriteString("    schema {\n")
+				sb.WriteString(fmt.Sprintf("    schema%s {\n", opt))
 				d.writeSchemaFields(sb, s, "        ")
 				sb.WriteString("    }\n")
 			} else {
-				sb.WriteString(fmt.Sprintf("    schema %s\n", d.formatType(s)))
+				sb.WriteString(fmt.Sprintf("    schema%s %s\n", opt, d.formatType(s)))
 			}
 		}
 	}
@@ -316,7 +343,7 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) string {
 		return "float"
 	case "array":
 		if s.Items != nil {
-			return "[" + d.formatType(s.Items) + "]"
+			return d.formatType(s.Items) + "[]"
 		}
 		return "any[]"
 	case "object":

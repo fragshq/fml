@@ -11,10 +11,8 @@ import (
 
 func TestDecompiler_Basic(t *testing.T) {
 	input := `system("Sys")
-parameters {
-    # The count
-    limit: int = 10 # inline
-}
+# The count
+parameter("limit", type=int, default=10) # inline
 set global = "hello"
 session("s1", target="res", after="prev", expect=1==1, iterate=context.items) {
     use search
@@ -46,7 +44,7 @@ session("s1", target="res", after="prev", expect=1==1, iterate=context.items) {
 
 	// 3. Verify key constructs exist in decompiled output
 	assert.Contains(t, output, `system("Sys")`)
-	assert.Contains(t, output, `limit: int = 10`)
+	assert.Contains(t, output, `parameter("limit", type=int, default=10)`)
 	assert.Contains(t, output, `set global = "hello"`)
 	assert.Contains(t, output, `session("s1", target="res", after="prev", expect=1==1, iterate=context.items)`)
 	assert.Contains(t, output, `use search`)
@@ -100,6 +98,64 @@ func TestDecompiler_NamespacedTargets(t *testing.T) {
 	assert.Equal(t, string(y1), string(y2))
 }
 
+func TestDecompiler_TransformerParser(t *testing.T) {
+	input := `transformer("t1") {
+    onFunctionOutput = "fn"
+    jmesPath = "*"
+    parser = json
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, _ := comp.Compile()
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `parser = json`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
+func TestDecompiler_TransformerCode(t *testing.T) {
+	input := `transformer("t1") {
+    onFunctionOutput = "fn"
+    jmesPath = "*"
+    code( output.map(x => x.id) )
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, _ := comp.Compile()
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `code( output.map(x => x.id) )`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
 func TestDecompiler_UnmarshalCompatibility(t *testing.T) {
 	yamlInput := `
 parameters:
@@ -130,7 +186,7 @@ components:
 	assert.NoError(t, err)
 
 	// Verify construction
-	assert.Contains(t, output, "p1: string")
+	assert.Contains(t, output, `parameter("p1", type=string)`)
 	assert.Contains(t, output, `session("s1")`)
 	assert.Contains(t, output, `schema("C1")`)
 	assert.Contains(t, output, `prompt("base")`)

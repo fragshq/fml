@@ -52,8 +52,8 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 			c.collectComment(*stmt.Comment)
 		case stmt.System != nil:
 			c.output.SystemPrompt = c.nodeValue(stmt.System.Value, stmt.System.InlineComment)
-		case stmt.Parameters != nil:
-			if err := c.processParameters(stmt.Parameters); err != nil {
+		case stmt.Parameter != nil:
+			if err := c.processParameter(stmt.Parameter); err != nil {
 				return nil, err
 			}
 		case stmt.Transformer != nil:
@@ -165,29 +165,45 @@ func (c *Compiler) addNodeMapEntry(mapNode *yaml.Node, key string, val interface
 	mapNode.Content = append(mapNode.Content, &keyNode, &valNode)
 }
 
-func (c *Compiler) processParameters(p *parser.ParametersBlock) error {
+func (c *Compiler) processParameter(p *parser.ParameterBlock) error {
 	if c.output.Parameters == nil {
 		c.output.Parameters = &yaml.Node{Kind: yaml.SequenceNode}
 	}
-	// Attach block-level comments to the 'parameters' key if they exist.
-	// But parameters is a slice of ParameterYAML, so we handle comments per entry.
-	for _, entry := range p.Entries {
-		param := &ParameterYAML{
-			Name:   entry.Name,
-			Schema: c.compileType(entry.Type),
-		}
-		if entry.Default != nil {
-			param.Default = c.nodeValue(c.compileValue(entry.Default), nil)
-		}
 
-		desc := c.resolveDescription(entry.LeadingComments, entry.InlineComment)
-		if desc != "" {
-			param.Schema.Description = desc
-		}
-
-		node := c.nodeValue(param, nil)
-		c.output.Parameters.Content = append(c.output.Parameters.Content, node)
+	param := &ParameterYAML{
+		Name: p.Name,
 	}
+
+	for _, attr := range p.Attributes {
+		if attr.Type != nil {
+			var err error
+			param.Schema, err = c.compileType(attr.Type)
+			if err != nil {
+				return fmt.Errorf("parameter %q: %w", p.Name, err)
+			}
+		}
+	}
+
+	if param.Schema == nil {
+		return fmt.Errorf("parameter %q missing 'type'", p.Name)
+	}
+
+	// Apply default and title if present
+	for _, attr := range p.Attributes {
+		if attr.Default != nil {
+			param.Schema.Default = c.compileValue(attr.Default)
+		} else if attr.Title != nil {
+			param.Schema.Title = *attr.Title
+		}
+	}
+
+	desc := c.resolveDescription(p.LeadingComments, p.InlineComment)
+	if desc != "" {
+		param.Schema.Description = desc
+	}
+
+	node := c.nodeValue(param, nil)
+	c.output.Parameters.Content = append(c.output.Parameters.Content, node)
 	return nil
 }
 
@@ -199,6 +215,10 @@ func (c *Compiler) processTransformer(t *parser.TransformerBlock) error {
 	for _, field := range t.Fields {
 		if field.JMESPath != nil {
 			trans.JMESPath = *field.JMESPath
+		} else if field.Parser != nil {
+			trans.Parser = *field.Parser
+		} else if field.Code != nil {
+			trans.Code = strings.TrimSpace(*field.Code)
 		} else if field.TriggerType != nil && field.TriggerValue != nil {
 			val := strings.Trim(*field.TriggerValue, "\"")
 			switch *field.TriggerType {
@@ -230,13 +250,16 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 				Properties: make(map[string]*JSONSchema),
 			}
 			for _, field := range item.Schema.Fields {
-				fSchema := c.compileType(field.Type)
+				fSchema, err := c.compileType(field.Type)
+				if err != nil {
+					return fmt.Errorf("component schema %q: %w", item.Schema.Name, err)
+				}
 				desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
 				if desc != "" {
 					fSchema.Description = desc
 				}
 				schema.Properties[field.Name] = fSchema
-				if !field.Optional && !field.Type.Optional {
+				if !field.Optional {
 					schema.Required = append(schema.Required, field.Name)
 				}
 			}
@@ -339,34 +362,39 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		case stmt.Prompt != nil:
 			promptItems = append(promptItems, stmt.Prompt.Items...)
 		case stmt.Schema != nil:
-			if stmt.Schema.Type != nil {
-				// Check for conflict: if session already had fields
-				if current, ok := c.sessionSchemas[s.Name]; ok && len(current.Properties) > 0 {
-					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
-				}
-				c.sessionSchemas[s.Name] = c.compileType(stmt.Schema.Type)
-				c.sessionOptional[s.Name] = stmt.Schema.Type.Optional
-			} else {
+			compiled, err := c.compileType(stmt.Schema.Type)
+			if err != nil {
+				return fmt.Errorf("session %q: %w", s.Name, err)
+			}
+
+			if desc := c.resolveDescription(nil, stmt.Schema.InlineComment); desc != "" {
+				compiled.Description = desc
+			}
+
+			// If it's a plain object (not array, not ref), we merge fields
+			if compiled.Type == "object" && compiled.Items == nil && compiled.Ref == "" && len(compiled.Enum) == 0 {
 				// Refresh sessSchema in case it was replaced by anonymous type
 				sessSchema = c.sessionSchemas[s.Name]
 				if sessSchema.Properties == nil {
 					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
 				}
-				for _, field := range stmt.Schema.Fields {
-					fSchema := c.compileType(field.Type)
-					desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
-					if desc != "" {
-						fSchema.Description = desc
-					}
-
-					if _, exists := sessSchema.Properties[field.Name]; exists {
-						return fmt.Errorf("field %q already defined in session %q", field.Name, s.Name)
-					}
-					sessSchema.Properties[field.Name] = fSchema
-					if !field.Optional && !field.Type.Optional {
-						sessSchema.Required = append(sessSchema.Required, field.Name)
-					}
+				if sessSchema.Description == "" {
+					sessSchema.Description = compiled.Description
 				}
+				for name, fSchema := range compiled.Properties {
+					if _, exists := sessSchema.Properties[name]; exists {
+						return fmt.Errorf("field %q already defined in session %q", name, s.Name)
+					}
+					sessSchema.Properties[name] = fSchema
+				}
+				sessSchema.Required = append(sessSchema.Required, compiled.Required...)
+			} else {
+				// Anonymous schema: check for conflict if session already had fields
+				if current, ok := c.sessionSchemas[s.Name]; ok && len(current.Properties) > 0 {
+					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
+				}
+				c.sessionSchemas[s.Name] = compiled
+				c.sessionOptional[s.Name] = stmt.Schema.Optional
 			}
 
 		}
@@ -535,20 +563,23 @@ func (c *Compiler) cleanPromptItem(s string) string {
 	return strings.TrimSpace(strings.Join(result, "\n"))
 }
 
-func (c *Compiler) compileType(t *parser.TypeExpr) *JSONSchema {
+func (c *Compiler) compileType(t *parser.TypeExpr) (*JSONSchema, error) {
 	if t == nil {
-		return &JSONSchema{}
+		return &JSONSchema{}, nil
 	}
-	schema := c.compileTypeBase(t.Base)
+	schema, err := c.compileTypeBase(t.Base)
+	if err != nil {
+		return nil, err
+	}
 	if t.Suffix {
 		schema = &JSONSchema{Type: "array", Items: schema}
 	}
-	return schema
+	return schema, nil
 }
 
-func (c *Compiler) compileTypeBase(t *parser.TypeBase) *JSONSchema {
+func (c *Compiler) compileTypeBase(t *parser.TypeBase) (*JSONSchema, error) {
 	if t == nil {
-		return &JSONSchema{}
+		return &JSONSchema{}, nil
 	}
 	switch {
 	case t.Scalar != nil:
@@ -559,32 +590,39 @@ func (c *Compiler) compileTypeBase(t *parser.TypeBase) *JSONSchema {
 			st = "number"
 		}
 		if st == "any" {
-			return &JSONSchema{}
+			return &JSONSchema{}, nil
 		}
-		return &JSONSchema{Type: st}
-	case t.Array != nil:
-		inner := c.compileType(t.Array)
-		return &JSONSchema{Type: "array", Items: inner}
+		return &JSONSchema{Type: st}, nil
 	case t.Object != nil:
 		schema := &JSONSchema{Type: "object", Properties: make(map[string]*JSONSchema)}
 		for _, field := range t.Object.Fields {
-			fSchema := c.compileType(field.Type)
+			if _, exists := schema.Properties[field.Name]; exists {
+				return nil, fmt.Errorf("field %q already defined", field.Name)
+			}
+			fSchema, err := c.compileType(field.Type)
+			if err != nil {
+				return nil, err
+			}
+			desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
+			if desc != "" {
+				fSchema.Description = desc
+			}
 			schema.Properties[field.Name] = fSchema
-			if !field.Optional && !field.Type.Optional {
+			if !field.Optional {
 				schema.Required = append(schema.Required, field.Name)
 			}
 		}
-		return schema
+		return schema, nil
 	case t.Ref != nil:
-		return &JSONSchema{Ref: fmt.Sprintf("#/components/schemas/%s", *t.Ref)}
+		return &JSONSchema{Ref: fmt.Sprintf("#/components/schemas/%s", *t.Ref)}, nil
 	case len(t.Enum) > 0:
 		enum := make([]interface{}, len(t.Enum))
 		for i, e := range t.Enum {
 			enum[i] = e
 		}
-		return &JSONSchema{Type: "string", Enum: enum}
+		return &JSONSchema{Type: "string", Enum: enum}, nil
 	}
-	return &JSONSchema{}
+	return &JSONSchema{}, nil
 }
 
 func (c *Compiler) compileValue(v *parser.Value) interface{} {

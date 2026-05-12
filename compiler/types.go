@@ -48,9 +48,8 @@ func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type ParameterYAML struct {
-	Name    string      `yaml:"name"`
-	Schema  *JSONSchema `yaml:"schema"`
-	Default *yaml.Node  `yaml:"default,omitempty"`
+	Name   string      `yaml:"name"`
+	Schema *JSONSchema `yaml:"schema"`
 }
 
 type ToolYAML struct {
@@ -64,6 +63,8 @@ type TransformerYAML struct {
 	OnFunctionInput  string `yaml:"onFunctionInput,omitempty"`
 	OnResource       string `yaml:"onResource,omitempty"`
 	JMESPath         string `yaml:"jmesPath"`
+	Parser           string `yaml:"parser,omitempty"`
+	Code             string `yaml:"code,omitempty"`
 }
 
 type CallYAML struct {
@@ -120,7 +121,9 @@ func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
 // JSONSchema node with comment support for fields that aren't description-driven.
 type JSONSchema struct {
 	Type        string                 `yaml:"type,omitempty"`
+	Title       string                 `yaml:"title,omitempty"`
 	Description string                 `yaml:"description,omitempty"`
+	Default     interface{}            `yaml:"default,omitempty"`
 	Properties  map[string]*JSONSchema `yaml:"properties,omitempty"`
 	Required    []string               `yaml:"required,omitempty"`
 	Items       *JSONSchema            `yaml:"items,omitempty"`

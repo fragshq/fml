@@ -1,10 +1,8 @@
 system("You are a precise research assistant.")
 
-parameters {
-    topic:    string
-    # Maximum number of results to return
-    max_results: int = 5
-}
+parameter("topic", type=string)
+# Maximum number of results to return
+parameter("max_results", type=int, default=5)
 
 set defaultRegion = "eu-west"
 
@@ -37,8 +35,8 @@ session("gather") {
     schema {
         overview: {
             summary:   string
-            keyPoints: [string]
-            sources:   [$SourceRef]
+            keyPoints: string[]
+            sources:   $SourceRef[]
         }
     }
 }
@@ -49,13 +47,13 @@ session("elaborate", after="gather", expect=context.overview.keyPoints != null, 
     - Expand each key point into a detailed explanation.
       Be concise but thorough. Limit to {{ .params.max_results }} points.
 
-    schema [string]
+    schema string[]
 }
 
 components {
     schema("SourceRef") {
         id:    string # the id of the source
         title: string
-        url:   string?
+        url?:  string
     }
 }

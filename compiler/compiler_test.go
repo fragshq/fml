@@ -72,13 +72,13 @@ func TestCompiler_ValidationErrors(t *testing.T) {
 		},
 		{
 			"AnonymousFieldConflictInSameSession",
-			`session("s1") { schema [string] schema { f1: int } }`,
+			`session("s1") { schema string[] schema { f1: int } }`,
 			"has both anonymous schema and field schema",
 		},
 		{
 			"DuplicateSessionField",
 			`session("s1") { schema { f1: string f1: int } }`,
-			"already defined in session \"s1\"",
+			"field \"f1\" already defined",
 		},
 	}
 
@@ -95,10 +95,8 @@ func TestCompiler_ComplexPlan(t *testing.T) {
 	input := `
 system("Research Assistant")
 
-parameters {
-    topic: string
-    max_results: int = 5
-}
+parameter("topic", type=string)
+parameter("max_results", type=int, default=5)
 
 transformer("filter") {
     onFunctionOutput = "search"
@@ -112,7 +110,7 @@ session("gather") {
     }
     - Found results for {{ .params.topic }}
     schema {
-        ids: [string]
+        ids: string[]
     }
 }
 
@@ -159,7 +157,7 @@ session("gather", target="results") {
 
 func TestCompiler_TargetWithIteration(t *testing.T) {
 	input := `
-session("gather") { schema { ids: [int] } }
+session("gather") { schema { ids: int[] } }
 session("process", after="gather", iterate=gather.ids, target="processed_items") {
   schema {
     result: string
@@ -181,6 +179,131 @@ session("process", after="gather", iterate=gather.ids, target="processed_items")
 	prop := schema.Properties["processed_items"]
 	assert.Equal(t, "array", prop.Type)
 	assert.Equal(t, "process", prop.XSession)
+}
+
+func TestCompiler_TransformerParser(t *testing.T) {
+	input := `
+transformer("t1") {
+    onFunctionOutput = "fn"
+    jmesPath = "*"
+    parser = "json"
+}
+transformer("t2") {
+    onFunctionOutput = "fn2"
+    jmesPath = "*"
+    parser = "csv"
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out.Transformers)
+
+	type Trans struct {
+		Name   string `yaml:"name"`
+		Parser string `yaml:"parser"`
+	}
+	var t1, t2 Trans
+	out.Transformers.Content[0].Decode(&t1)
+	out.Transformers.Content[1].Decode(&t2)
+
+	assert.Equal(t, "t1", t1.Name)
+	assert.Equal(t, "json", t1.Parser)
+	assert.Equal(t, "t2", t2.Name)
+	assert.Equal(t, "csv", t2.Parser)
+}
+
+func TestCompiler_TransformerCode(t *testing.T) {
+	input := `
+transformer("t1") {
+    onFunctionOutput = "fn"
+    jmesPath = "*"
+    code( output.map(x => x.id) )
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out.Transformers)
+
+	type Trans struct {
+		Name string `yaml:"name"`
+		Code string `yaml:"code"`
+	}
+	var t1 Trans
+	out.Transformers.Content[0].Decode(&t1)
+
+	assert.Equal(t, "t1", t1.Name)
+	assert.Equal(t, "output.map(x => x.id)", t1.Code)
+}
+
+func TestCompiler_TransformerParserUnquoted(t *testing.T) {
+	input := `
+transformer("t1") {
+    onFunctionOutput = "fn"
+    jmesPath = "*"
+    parser = json
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out.Transformers)
+
+	type Trans struct {
+		Name   string `yaml:"name"`
+		Parser string `yaml:"parser"`
+	}
+	var t1 Trans
+	out.Transformers.Content[0].Decode(&t1)
+
+	assert.Equal(t, "t1", t1.Name)
+	assert.Equal(t, "json", t1.Parser)
+}
+
+func TestCompiler_NestedSchemaComments(t *testing.T) {
+	input := `
+session("s") {
+  schema {
+    user: {
+      name: string # The user's name
+      age: int # The user's age
+    }
+  }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	userSchema := schema.Properties["s"].Properties["user"]
+	assert.Equal(t, "The user's name", userSchema.Properties["name"].Description)
+	assert.Equal(t, "The user's age", userSchema.Properties["age"].Description)
+}
+
+func TestCompiler_NestedParameterComments(t *testing.T) {
+	input := `
+parameter("config", type={
+    retries: int # Max retries
+    timeout: float # Request timeout
+})
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	// parameters is a SequenceNode
+	require.Equal(t, 1, len(out.Parameters.Content))
+
+	type Param struct {
+		Name   string     `yaml:"name"`
+		Schema JSONSchema `yaml:"schema"`
+	}
+	var p Param
+	out.Parameters.Content[0].Decode(&p)
+
+	configSchema := p.Schema
+	assert.Equal(t, "Max retries", configSchema.Properties["retries"].Description)
+	assert.Equal(t, "Request timeout", configSchema.Properties["timeout"].Description)
 }
 
 func cOrder(p *PlanYAML) []string {

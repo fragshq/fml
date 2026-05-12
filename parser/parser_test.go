@@ -12,9 +12,7 @@ func TestParser_FullPlan(t *testing.T) {
 
 	input := `
 system("Sys")
-parameters {
-  limit: int = 10
-}
+parameter("limit", type=int, default=10)
 session("gather") {
   schema {
     out: string
@@ -26,19 +24,19 @@ session("gather") {
 	assert.NotNil(t, plan)
 
 	assert.Equal(t, "Sys", plan.Statements[0].System.Value)
-	assert.Equal(t, "limit", plan.Statements[1].Parameters.Entries[0].Name)
+	assert.Equal(t, "limit", plan.Statements[1].Parameter.Name)
 	assert.Equal(t, "gather", plan.Statements[2].Session.Name)
 }
 
 func TestParser_AnonymousSchema(t *testing.T) {
 	p, _ := NewParser()
-	input := `session("it") { schema [string] }`
+	input := `session("it") { schema string[] }`
 	plan, err := p.ParseString("test.frags", input)
 	assert.NoError(t, err)
 
 	schema := plan.Statements[0].Session.Statements[0].Schema
 	assert.NotNil(t, schema.Type)
-	assert.NotNil(t, schema.Type.Base.Array)
+	assert.True(t, schema.Type.Suffix)
 }
 
 func TestParser_CallCode(t *testing.T) {
@@ -53,11 +51,16 @@ func TestParser_CallCode(t *testing.T) {
 
 func TestParser_EnumTypes(t *testing.T) {
 	p, _ := NewParser()
-	input := `parameters { status: "up"|"down"|pending }`
+	input := `parameter("status", type="up"|"down"|pending)`
 	plan, err := p.ParseString("test.frags", input)
 	assert.NoError(t, err)
 
-	enum := plan.Statements[0].Parameters.Entries[0].Type.Base.Enum
+	var enum []string
+	for _, attr := range plan.Statements[0].Parameter.Attributes {
+		if attr.Type != nil {
+			enum = attr.Type.Base.Enum
+		}
+	}
 	assert.Equal(t, []string{"up", "down", "pending"}, enum)
 }
 

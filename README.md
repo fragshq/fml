@@ -57,10 +57,8 @@ You can always use the `--help` flag to see available commands and options:
 ```fml
 system("You are a research assistant.")
 
-parameters {
-    topic: string
-    limit: int = 5
-}
+parameter("topic", type=string)
+parameter("limit", type=int, default=5)
 
 session("research") {
     use search
@@ -69,7 +67,7 @@ session("research") {
     - Summarize the top {{ .params.limit }} results.
 
     schema {
-        trends: [string]
+        trends: string[]
         summary: string
     }
 }

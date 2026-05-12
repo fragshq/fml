@@ -56,33 +56,31 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 
 			lines := strings.Split(t.Value, "\n")
 			for i, lineText := range lines {
+				length := len(strings.TrimRight(lineText, "\r"))
+				if length == 0 {
+					continue
+				}
+
 				dLine := 0
 				dChar := 0
 				if i == 0 {
-					dLine = line - lastLine
+					dLine = (t.Pos.Line + i - 1) - lastLine
 					if dLine == 0 {
-						dChar = char - lastChar
+						dChar = (t.Pos.Column - 1) - lastChar
 					} else {
-						dChar = char
+						dChar = (t.Pos.Column - 1)
 					}
 				} else {
 					dLine = 1
-					dChar = 0
+					dChar = 0 // Start from column 1 for continuation lines
 				}
 
-				length := len(strings.TrimRight(lineText, "\r"))
-				if length > 0 {
-					data = append(data, dLine, dChar, length, tokenType, 0)
-					lastLine += dLine
-					if dLine == 0 {
-						lastChar += dChar
-					} else {
-						lastChar = dChar
-					}
-				} else if i > 0 {
-					// Account for the newline even if the line is empty
-					lastLine += 1
-					lastChar = 0
+				data = append(data, dLine, dChar, length, tokenType, 0)
+				lastLine += dLine
+				if dLine == 0 {
+					lastChar += dChar
+				} else {
+					lastChar = dChar
 				}
 			}
 		}

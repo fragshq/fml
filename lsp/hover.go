@@ -61,7 +61,7 @@ func (h *FMLHandler) Hover(ctx context.Context, params *lsp.HoverParams) (*lsp.H
 }
 
 func isWordChar(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '+' || c == '-'
 }
 
 var languageDocs = map[string]string{
@@ -77,7 +77,7 @@ var languageDocs = map[string]string{
 	"iterate":     "**iterate=expression**\n\nSpecifies an expression that returns a collection. The session will be executed once for each item in the collection.",
 	"target":      "**target=\"name\"**\n\nOverrides the default property name in the root output schema for this session's results.",
 	"use":         "**use <type> <name>**\n\nDeclares a tool requirement for the session. Supported types: `mcp`, `apicp`, `collection`, `function`, `search`.",
-	"call":        "**call(\"name\") -> [ns:]var { ... }**\n\nInvokes a tool or transformer. The output can be optionally mapped to a variable in a specific namespace (defaulting to `vars`).",
+	"call":        "**call(\"name\") [-> [ns:]var] [{ ... }]**\n\nInvokes a tool or transformer. The output can be optionally mapped to a variable. The arguments block `{ ... }` is optional.",
 	"context":     "**context ...**\n\nSets the prompt context for the session. Can be a boolean or a string template.",
 	"schema":      "**schema { ... }** or **schema Type**\n\nDefines the output structure for the session. Properties are merged into the session's object if using the `{}` syntax.",
 	"schema?":     "**schema? ...**\n\nDefines an optional output structure. The session's property will not be marked as required in the root schema.",
@@ -86,4 +86,6 @@ var languageDocs = map[string]string{
 	"components":  "**components { ... }**\n\nDefines reusable schemas and prompt templates that can be referenced elsewhere in the plan.",
 	"prompt":      "**prompt(\"name\") { \"...\" }**\n\nDefines a reusable prompt component within the `components` block.",
 	"code":        "**code( ... )**\n\nExecutes custom JavaScript code for post-processing tool results or transformer logic.",
+	"+":           "**+ Pre-prompt line**\n\nDefines a pre-prompt for the session. Multiple pre-prompts are collected into a single `prePrompt` field in the compiled plan. Pre-prompts are typically used for providing context or few-shot examples.",
+	"-":           "**- Prompt line**\n\nDefines the main prompt for the session. Each session can have at most one prompt line. The prompt line is usually the final instruction sent to the LLM.",
 }

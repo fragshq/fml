@@ -63,7 +63,7 @@ parameter("limit", type=int, default=5)
 session("research") {
     use search
     
-    - Search for the latest trends in {{ .params.topic }}.
+    + Search for the latest trends in {{ .params.topic }}.
     - Summarize the top {{ .params.limit }} results.
 
     schema {

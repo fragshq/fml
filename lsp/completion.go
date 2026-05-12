@@ -125,11 +125,13 @@ func parserValueCompletions() []lsp.CompletionItem {
 func sessionKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
 		{Label: "use", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "use <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a tool requirement for the session."}},
-		{Label: "call", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "call(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Invokes a tool or function."}},
+		{Label: "call", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "call(\"...\") [-> var] [{ ... }]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Invokes a tool or function. The fields block is optional."}},
 		{Label: "context", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "context ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the session context."}},
 		{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines the output structure for the session."}},
 		{Label: "schema?", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema? { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an optional output structure for the session."}},
 		{Label: "set", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "set var = ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a variable."}},
+		{Label: "+", Kind: ptr(lsp.CompletionItemKindSnippet), Detail: "+ <pre-prompt>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Starts a pre-prompt line."}},
+		{Label: "-", Kind: ptr(lsp.CompletionItemKindSnippet), Detail: "- <prompt>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Starts the main prompt line."}},
 	}
 }
 

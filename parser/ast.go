@@ -67,7 +67,7 @@ type CallBlock struct {
 	Name          string       `"call" "(" @String ")"`
 	Target        *CallTarget  `("->" @@)?`
 	InlineComment *string      `@InlineComment?`
-	Fields        []*CallField `"{" @@* "}"`
+	Fields        []*CallField `("{" @@* "}")?`
 }
 
 type CallTarget struct {

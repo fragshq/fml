@@ -128,7 +128,7 @@ TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
 # ── call (plan-level and session-level share the same syntax) ─────────────────
 
-CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? "{" CallField* "}"
+CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? ("{" CallField* "}")?
 
 CallField    ← IDENTIFIER "=" Value NEWLINE
              / CodeBlock

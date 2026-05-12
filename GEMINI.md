@@ -17,7 +17,7 @@ The Frags DSL compiler is a Go-based tool that transforms a compact, human-reada
 
 ### Stateful Lexing
 The lexer uses a state-machine approach to handle complex DSL constructs:
-- **Prompt Detection**: Identifies `- ` markers at the start of lines and captures multi-line blocks based on indentation levels.
+- **Prompt Detection**: Identifies `+ ` (pre-prompt) and `- ` (prompt) markers at the start of lines and captures multi-line blocks based on indentation levels.
 - **Balanced Capture**: Used for `code(...)` and `$(...)` blocks to ensure nested parentheses are correctly tokenized as a single unit.
 - **Attribute Context**: Switches to greedy consumption for session attributes like `expect=` and `iterate=` to capture raw expressions without premature termination at standard punctuation.
 
@@ -39,7 +39,7 @@ The compiler implements a unique grouping strategy for the output JSON Schema:
     - `system("...")`: Sets the global system prompt.
     - `parameter("name", type=..., default=..., title=...)`: Defines an input parameter.
     - `transformer("name") { ... }`: Defines reusable output transformers.
-    - `call("tool") -> [ns:]var { ... }`: Tool invocations with namespaced argument mapping.
+    - `call("tool") [-> [ns:]var] [{ ... }]`: Tool invocations with optional namespaced argument mapping and optional body.
     - `session("name", after="prev", expect=...) { ... }`: Sequential pipeline steps.
     - `use mcp|apicp|search ...`: Declares tool requirements.
     - Enums (`"a"|"b"`) and optional fields (`field?: type`) are natively supported.

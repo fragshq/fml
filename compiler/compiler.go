@@ -593,12 +593,13 @@ func (c *Compiler) cleanPromptItem(s string) string {
 	result = append(result, strings.TrimRight(first, " \t"))
 	if len(lines) > 1 {
 		fullFirst := lines[0]
-		stripLen := 1
-		if len(fullFirst) > 1 && fullFirst[1] == ' ' {
-			stripLen = 2
+		indent := 0
+		for indent < len(fullFirst) && (fullFirst[indent] == ' ' || fullFirst[indent] == '\t') {
+			indent++
 		}
+		stripLen := indent + 1
 		for _, line := range lines[1:] {
-			if len(line) >= stripLen {
+			if len(line) > stripLen {
 				result = append(result, strings.TrimRight(line[stripLen:], " \t"))
 			} else {
 				result = append(result, "")

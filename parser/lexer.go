@@ -393,8 +393,8 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 
 	token := lexer.Token{
 		Type:  lexer.TokenType(typ),
-		Value: val[indent:],
-		Pos:   lexer.Position{Filename: startPos.Filename, Line: startPos.Line, Column: startPos.Column + indent},
+		Value: val,
+		Pos:   startPos,
 	}
 
 	l.s = l.s[totalLen:]

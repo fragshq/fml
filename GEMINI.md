@@ -55,10 +55,11 @@ The compiler implements a unique grouping strategy for the output JSON Schema:
 - [x] Precise YAML comment placement and description mapping.
 - [x] Decompiler for converting YAML plans back to FML.
 - [x] LSP Server with diagnostics, semantic highlighting, and autocompletion.
-- [x] High-coverage unit test suite.
+- [x] High-coverage unit test suite (Core, Compiler, Decompiler, and LSP).
 
 **Future Considerations**:
 - [ ] Enhanced semantic validation for circular dependencies and variable scope.
 - [ ] Integration with external tool definitions (MCP, API CP) for better reference checking.
 - [ ] Advanced LSP features: Goto Definition and Rename refactoring.
 - [ ] Formatter (`fml fmt`) to standardize code style across projects.
+- [ ] LSP Performance: Optimize the LSP handlers to reuse the lexer/parser results across different requests (e.g., Hover and Semantic Tokens currently re-lex/parse the document).

@@ -20,7 +20,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 		return nil, nil
 	}
 
-	data := []int{}
+	data := make([]int, 0)
 	lastLine := 0
 	lastChar := 0
 
@@ -51,9 +51,6 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 		}
 
 		if tokenType != -1 {
-			line := t.Pos.Line - 1
-			char := t.Pos.Column - 1
-
 			lines := strings.Split(t.Value, "\n")
 			for i, lineText := range lines {
 				length := len(strings.TrimRight(lineText, "\r"))
@@ -68,7 +65,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 					if dLine == 0 {
 						dChar = (t.Pos.Column - 1) - lastChar
 					} else {
-						dChar = (t.Pos.Column - 1)
+						dChar = t.Pos.Column - 1
 					}
 				} else {
 					dLine = 1

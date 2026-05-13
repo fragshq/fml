@@ -70,7 +70,9 @@ func runTCP(addr string) error {
 		}
 
 		go func(c net.Conn) {
-			defer c.Close()
+			defer func() {
+				_ = c.Close()
+			}()
 			handler := &FMLHandler{}
 			srv := server.NewServer(handler, server.WithLogger(slog.Default()))
 			if err := srv.Run(context.Background(), c); err != nil {
@@ -94,7 +96,9 @@ func runWS(addr string) error {
 		slog.Info("new websocket connection")
 
 		go func() {
-			defer conn.Close()
+			defer func() {
+				_ = conn.Close()
+			}()
 			handler := &FMLHandler{}
 			srv := server.NewServer(handler, server.WithLogger(slog.Default()))
 			if err := srv.Run(context.Background(), newWSConn(conn)); err != nil {

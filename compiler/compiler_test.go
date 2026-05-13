@@ -130,7 +130,7 @@ session("report", after="gather", iterate=gather.ids) {
 
 	// Verify iterate wrapping
 	var schema JSONSchema
-	out.Schema.Decode(&schema)
+	_ = out.Schema.Decode(&schema)
 	assert.Equal(t, parser.TypeArray, schema.Properties["report"].Type)
 }
 
@@ -203,8 +203,8 @@ transformer("t2") {
 		Parser string `yaml:"parser"`
 	}
 	var t1, t2 Trans
-	out.Transformers.Content[0].Decode(&t1)
-	out.Transformers.Content[1].Decode(&t2)
+	_ = out.Transformers.Content[0].Decode(&t1)
+	_ = out.Transformers.Content[1].Decode(&t2)
 
 	assert.Equal(t, "t1", t1.Name)
 	assert.Equal(t, "json", t1.Parser)
@@ -229,7 +229,7 @@ transformer("t1") {
 		Code string `yaml:"code"`
 	}
 	var t1 Trans
-	out.Transformers.Content[0].Decode(&t1)
+	_ = out.Transformers.Content[0].Decode(&t1)
 
 	assert.Equal(t, "t1", t1.Name)
 	assert.Equal(t, "output.map(x => x.id)", t1.Code)
@@ -252,7 +252,7 @@ transformer("t1") {
 		Parser string `yaml:"parser"`
 	}
 	var t1 Trans
-	out.Transformers.Content[0].Decode(&t1)
+	_ = out.Transformers.Content[0].Decode(&t1)
 
 	assert.Equal(t, "t1", t1.Name)
 	assert.Equal(t, "json", t1.Parser)
@@ -299,7 +299,7 @@ parameter("config", type={
 		Schema JSONSchema `yaml:"schema"`
 	}
 	var p Param
-	out.Parameters.Content[0].Decode(&p)
+	_ = out.Parameters.Content[0].Decode(&p)
 
 	configSchema := p.Schema
 	assert.Equal(t, "Max retries", configSchema.Properties["retries"].Description)
@@ -371,9 +371,9 @@ session("s") {
 	}
 
 	var c1, c2, c3 Call
-	preCallsNode.Content[0].Decode(&c1)
-	preCallsNode.Content[1].Decode(&c2)
-	preCallsNode.Content[2].Decode(&c3)
+	_ = preCallsNode.Content[0].Decode(&c1)
+	_ = preCallsNode.Content[1].Decode(&c2)
+	_ = preCallsNode.Content[2].Decode(&c3)
 
 	assert.Equal(t, "vars", c1.In)
 	assert.Equal(t, "var1", c1.Var)

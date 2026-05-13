@@ -14,12 +14,12 @@ func (h *FMLHandler) Hover(ctx context.Context, params *lsp.HoverParams) (*lsp.H
 	}
 
 	lines := strings.Split(text, "\n")
-	if int(params.Position.Line) >= len(lines) {
+	if params.Position.Line >= len(lines) {
 		return nil, nil
 	}
 
 	line := lines[params.Position.Line]
-	pos := int(params.Position.Character)
+	pos := params.Position.Character
 	if pos >= len(line) {
 		pos = len(line) - 1
 	}

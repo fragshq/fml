@@ -19,7 +19,7 @@ func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.MappingNode {
 		return nil
 	}
-	for i := 0; i < len(value.Content); i += 2 {
+	for i := 0; i+1 < len(value.Content); i += 2 {
 		key := value.Content[i].Value
 		val := value.Content[i+1]
 		switch key {
@@ -30,7 +30,9 @@ func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
 		case "vars":
 			p.Vars = val
 		case "requiredTools":
-			val.Decode(&p.RequiredTools)
+			if err := val.Decode(&p.RequiredTools); err != nil {
+				return err
+			}
 		case "transformers":
 			p.Transformers = val
 		case "preCalls":
@@ -41,7 +43,9 @@ func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
 			p.Schema = val
 		case "components":
 			p.Components = &ComponentsYAML{}
-			val.Decode(p.Components)
+			if err := val.Decode(p.Components); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -100,12 +104,14 @@ func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.MappingNode {
 		return nil
 	}
-	for i := 0; i < len(value.Content); i += 2 {
+	for i := 0; i+1 < len(value.Content); i += 2 {
 		key := value.Content[i].Value
 		val := value.Content[i+1]
 		switch key {
 		case "schemas":
-			val.Decode(&c.Schemas)
+			if err := val.Decode(&c.Schemas); err != nil {
+				return err
+			}
 		case "prompts":
 			c.Prompts = make(map[string]*yaml.Node)
 			if val.Kind == yaml.MappingNode {

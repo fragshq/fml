@@ -20,6 +20,9 @@ func New(plan *compiler.PlanYAML) *Decompiler {
 
 // Decompile produces the FML string.
 func (d *Decompiler) Decompile() (string, error) {
+	if d.plan == nil {
+		return "", fmt.Errorf("plan is nil")
+	}
 	var sb strings.Builder
 
 	if d.plan.SystemPrompt != nil {
@@ -28,13 +31,15 @@ func (d *Decompiler) Decompile() (string, error) {
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {
 		for _, pNode := range d.plan.Parameters.Content {
-			d.writeParameter(&sb, pNode)
+			if err := d.writeParameter(&sb, pNode); err != nil {
+				return "", err
+			}
 		}
 		sb.WriteString("\n")
 	}
 
 	if d.plan.Vars != nil && len(d.plan.Vars.Content) > 0 {
-		for i := 0; i < len(d.plan.Vars.Content); i += 2 {
+		for i := 0; i+1 < len(d.plan.Vars.Content); i += 2 {
 			key := d.plan.Vars.Content[i].Value
 			valNode := d.plan.Vars.Content[i+1]
 			sb.WriteString(fmt.Sprintf("set %s = %s\n", key, d.formatValue(valNode)))
@@ -55,7 +60,9 @@ func (d *Decompiler) Decompile() (string, error) {
 
 	if d.plan.Transformers != nil && len(d.plan.Transformers.Content) > 0 {
 		for _, tNode := range d.plan.Transformers.Content {
-			d.writeTransformer(&sb, tNode)
+			if err := d.writeTransformer(&sb, tNode); err != nil {
+				return "", err
+			}
 		}
 		sb.WriteString("\n")
 	}
@@ -65,7 +72,9 @@ func (d *Decompiler) Decompile() (string, error) {
 		if len(d.plan.Components.Schemas) > 0 {
 			for name, schema := range d.plan.Components.Schemas {
 				sb.WriteString(fmt.Sprintf("    schema(%q) {\n", name))
-				d.writeSchemaFields(&sb, schema, "        ")
+				if err := d.writeSchemaFields(&sb, schema, "        "); err != nil {
+					return "", err
+				}
 				sb.WriteString("    }\n")
 			}
 		}
@@ -85,12 +94,14 @@ func (d *Decompiler) Decompile() (string, error) {
 		requiredProps := make(map[string]bool)
 		if d.plan.Schema != nil {
 			var rootSchema compiler.JSONSchema
-			d.plan.Schema.Decode(&rootSchema)
+			if err := d.plan.Schema.Decode(&rootSchema); err != nil {
+				return "", fmt.Errorf("failed to decode root schema: %w", err)
+			}
 			for _, r := range rootSchema.Required {
 				requiredProps[r] = true
 			}
 			for propName, s := range rootSchema.Properties {
-				if s.XSession != "" {
+				if s != nil && s.XSession != "" {
 					if _, ok := sessionSchemas[s.XSession]; !ok {
 						sessionSchemas[s.XSession] = make(map[string]*compiler.JSONSchema)
 					}
@@ -99,10 +110,12 @@ func (d *Decompiler) Decompile() (string, error) {
 			}
 		}
 
-		for i := 0; i < len(d.plan.Sessions.Content); i += 2 {
+		for i := 0; i+1 < len(d.plan.Sessions.Content); i += 2 {
 			name := d.plan.Sessions.Content[i].Value
 			sessNode := d.plan.Sessions.Content[i+1]
-			d.writeSession(&sb, name, sessNode, sessionSchemas[name], requiredProps)
+			if err := d.writeSession(&sb, name, sessNode, sessionSchemas[name], requiredProps); err != nil {
+				return "", err
+			}
 			sb.WriteString("\n")
 		}
 	}
@@ -110,24 +123,40 @@ func (d *Decompiler) Decompile() (string, error) {
 	return strings.TrimSpace(sb.String()) + "\n", nil
 }
 
-func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) {
+func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error {
 	if node.HeadComment != "" {
 		for _, line := range strings.Split(node.HeadComment, "\n") {
 			sb.WriteString(fmt.Sprintf("# %s\n", line))
 		}
 	}
 
-	name := d.getMapValue(node, "name").Value
-	schemaNode := d.getMapValue(node, "schema")
-	var schema compiler.JSONSchema
-	schemaNode.Decode(&schema)
+	nameNode := d.getMapValue(node, "name")
+	if nameNode == nil {
+		return fmt.Errorf("parameter node missing 'name'")
+	}
+	name := nameNode.Value
 
-	sb.WriteString(fmt.Sprintf("parameter(%q, type=%s", name, d.formatType(&schema)))
+	schemaNode := d.getMapValue(node, "schema")
+	if schemaNode == nil {
+		return fmt.Errorf("parameter %q missing 'schema'", name)
+	}
+
+	var schema compiler.JSONSchema
+	if err := schemaNode.Decode(&schema); err != nil {
+		return fmt.Errorf("failed to decode schema for parameter %q: %w", name, err)
+	}
+
+	typ, err := d.formatType(&schema)
+	if err != nil {
+		return err
+	}
+	sb.WriteString(fmt.Sprintf("parameter(%q, type=%s", name, typ))
 
 	if schema.Default != nil {
-		// We need to format the default value. Since it's interface{}, we can encode it to a node first.
 		var defNode yaml.Node
-		defNode.Encode(schema.Default)
+		if err := defNode.Encode(schema.Default); err != nil {
+			return fmt.Errorf("failed to encode default value for parameter %q: %w", name, err)
+		}
 		sb.WriteString(fmt.Sprintf(", default=%s", d.formatValue(&defNode)))
 	}
 
@@ -143,10 +172,15 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) {
 		sb.WriteString(fmt.Sprintf(" # %s", schema.Description))
 	}
 	sb.WriteString("\n")
+	return nil
 }
 
-func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) {
-	name := d.getMapValue(node, "name").Value
+func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) error {
+	nameNode := d.getMapValue(node, "name")
+	if nameNode == nil {
+		return fmt.Errorf("transformer node missing 'name'")
+	}
+	name := nameNode.Value
 	sb.WriteString(fmt.Sprintf("transformer(%q) {\n", name))
 
 	if v := d.getMapValue(node, "onFunctionOutput"); v != nil {
@@ -173,9 +207,10 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) {
 		sb.WriteString(fmt.Sprintf("    code( %s )\n", v.Value))
 	}
 	sb.WriteString("}\n")
+	return nil
 }
 
-func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) {
+func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) error {
 	sb.WriteString(fmt.Sprintf("session(%q", name))
 
 	if len(schemas) == 1 {
@@ -209,7 +244,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	// Vars
 	vars := d.getMapValue(sessNode, "vars")
 	if vars != nil {
-		for i := 0; i < len(vars.Content); i += 2 {
+		for i := 0; i+1 < len(vars.Content); i += 2 {
 			sb.WriteString(fmt.Sprintf("    set %s = %s\n", vars.Content[i].Value, d.formatValue(vars.Content[i+1])))
 		}
 	}
@@ -218,11 +253,19 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	tools := d.getMapValue(sessNode, "tools")
 	if tools != nil {
 		for _, tNode := range tools.Content {
-			typ := d.getMapValue(tNode, "type").Value
+			typNode := d.getMapValue(tNode, "type")
+			if typNode == nil {
+				continue
+			}
+			typ := typNode.Value
 			if typ == "internet_search" {
 				sb.WriteString("    use search\n")
 			} else {
-				name := d.getMapValue(tNode, "name").Value
+				nameNode := d.getMapValue(tNode, "name")
+				if nameNode == nil {
+					continue
+				}
+				name := nameNode.Value
 				sb.WriteString(fmt.Sprintf("    use %s %s\n", typ, name))
 			}
 		}
@@ -232,7 +275,11 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	calls := d.getMapValue(sessNode, "preCalls")
 	if calls != nil {
 		for _, cNode := range calls.Content {
-			cName := d.getMapValue(cNode, "name").Value
+			cNameNode := d.getMapValue(cNode, "name")
+			if cNameNode == nil {
+				continue
+			}
+			cName := cNameNode.Value
 			sb.WriteString(fmt.Sprintf("    call(%q)", cName))
 
 			in := d.getMapValue(cNode, "in")
@@ -248,7 +295,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 
 			args := d.getMapValue(cNode, "args")
 			if args != nil {
-				for i := 0; i < len(args.Content); i += 2 {
+				for i := 0; i+1 < len(args.Content); i += 2 {
 					sb.WriteString(fmt.Sprintf("        %s = %s\n", args.Content[i].Value, d.formatValue(args.Content[i+1])))
 				}
 			}
@@ -298,15 +345,22 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 
 			if s.Type == parser.TypeObject && len(s.Properties) > 0 {
 				sb.WriteString(fmt.Sprintf("    schema%s {\n", opt))
-				d.writeSchemaFields(sb, s, "        ")
+				if err := d.writeSchemaFields(sb, s, "        "); err != nil {
+					return err
+				}
 				sb.WriteString("    }\n")
 			} else {
-				sb.WriteString(fmt.Sprintf("    schema%s %s\n", opt, d.formatType(s)))
+				ft, err := d.formatType(s)
+				if err != nil {
+					return err
+				}
+				sb.WriteString(fmt.Sprintf("    schema%s %s\n", opt, ft))
 			}
 		}
 	}
 
 	sb.WriteString("}\n")
+	return nil
 }
 
 func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix string) {
@@ -320,7 +374,7 @@ func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix st
 	}
 }
 
-func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSchema, indent string) {
+func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSchema, indent string) error {
 	for name, prop := range s.Properties {
 		sb.WriteString(fmt.Sprintf("%s%s", indent, name))
 		isRequired := false
@@ -333,34 +387,46 @@ func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSche
 		if !isRequired {
 			sb.WriteString("?")
 		}
-		sb.WriteString(fmt.Sprintf(": %s\n", d.formatType(prop)))
+		ft, err := d.formatType(prop)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(fmt.Sprintf(": %s\n", ft))
 	}
+	return nil
 }
 
-func (d *Decompiler) formatType(s *compiler.JSONSchema) string {
+func (d *Decompiler) formatType(s *compiler.JSONSchema) (string, error) {
+	if s == nil {
+		return "any", nil
+	}
 	if s.Ref != "" {
-		return "$" + strings.TrimPrefix(s.Ref, "#/components/schemas/")
+		return "$" + strings.TrimPrefix(s.Ref, "#/components/schemas/"), nil
 	}
 	if len(s.Enum) > 0 {
 		vals := make([]string, len(s.Enum))
 		for i, v := range s.Enum {
 			vals[i] = fmt.Sprintf("%v", v)
 		}
-		return strings.Join(vals, "|")
+		return strings.Join(vals, "|"), nil
 	}
 	switch s.Type {
 	case parser.TypeInteger:
-		return "int"
+		return "int", nil
 	case parser.TypeNumber:
-		return "float"
+		return "float", nil
 	case parser.TypeArray:
 		if s.Items != nil {
-			return d.formatType(s.Items) + "[]"
+			ft, err := d.formatType(s.Items)
+			if err != nil {
+				return "", err
+			}
+			return ft + "[]", nil
 		}
-		return "any[]"
+		return "any[]", nil
 	case parser.TypeObject:
 		if len(s.Properties) == 0 {
-			return "any"
+			return "any", nil
 		}
 		var sb strings.Builder
 		sb.WriteString("{")
@@ -369,15 +435,19 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) string {
 			if !first {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(name + ": " + d.formatType(prop))
+			ft, err := d.formatType(prop)
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(name + ": " + ft)
 			first = false
 		}
 		sb.WriteString("}")
-		return sb.String()
+		return sb.String(), nil
 	case "":
-		return "any"
+		return "any", nil
 	default:
-		return s.Type
+		return s.Type, nil
 	}
 }
 
@@ -400,7 +470,7 @@ func (d *Decompiler) formatValue(n *yaml.Node) string {
 	if n.Kind == yaml.MappingNode {
 		var sb strings.Builder
 		sb.WriteString("{")
-		for i := 0; i < len(n.Content); i += 2 {
+		for i := 0; i+1 < len(n.Content); i += 2 {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -428,7 +498,7 @@ func (d *Decompiler) getMapValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return nil
 	}
-	for i := 0; i < len(node.Content); i += 2 {
+	for i := 0; i+1 < len(node.Content); i += 2 {
 		if node.Content[i].Value == key {
 			return node.Content[i+1]
 		}

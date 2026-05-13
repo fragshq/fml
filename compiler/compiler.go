@@ -51,7 +51,11 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 		case stmt.Comment != nil:
 			c.collectComment(*stmt.Comment)
 		case stmt.System != nil:
-			c.output.SystemPrompt = c.nodeValue(stmt.System.Value, stmt.System.InlineComment)
+			nv, err := c.nodeValue(stmt.System.Value, stmt.System.InlineComment)
+			if err != nil {
+				return nil, err
+			}
+			c.output.SystemPrompt = nv
 		case stmt.Parameter != nil:
 			if err := c.processParameter(stmt.Parameter); err != nil {
 				return nil, err
@@ -64,9 +68,13 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 			if c.output.Vars == nil {
 				c.output.Vars = &yaml.Node{Kind: yaml.MappingNode}
 			}
-			c.addNodeMapEntry(c.output.Vars, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment)
+			if err := c.addNodeMapEntry(c.output.Vars, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment); err != nil {
+				return nil, err
+			}
 		case stmt.Require != nil:
-			c.processRequire(stmt.Require)
+			if err := c.processRequire(stmt.Require); err != nil {
+				return nil, err
+			}
 		case stmt.Call != nil:
 			callNode, err := c.compileCallNode(stmt.Call)
 			if err != nil {
@@ -85,7 +93,10 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 
 	// Grouped session schema finalization
 	for _, name := range c.sessionOrder {
-		sessNode := c.getSessionNode(name)
+		sessNode, err := c.getSessionNode(name)
+		if err != nil {
+			return nil, err
+		}
 		schema, ok := c.sessionSchemas[name]
 		if !ok {
 			continue
@@ -93,7 +104,7 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 
 		// Iterate logic: entire session result is a collection.
 		iterateOn := ""
-		for i := 0; i < len(sessNode.Content); i += 2 {
+		for i := 0; i+1 < len(sessNode.Content); i += 2 {
 			if sessNode.Content[i].Value == "iterateOn" {
 				iterateOn = sessNode.Content[i+1].Value
 			}
@@ -120,7 +131,9 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 
 	if len(rootSchema.Properties) > 0 {
 		var schemaNode yaml.Node
-		schemaNode.Encode(rootSchema)
+		if err := schemaNode.Encode(rootSchema); err != nil {
+			return nil, err
+		}
 		c.output.Schema = &schemaNode
 	}
 
@@ -132,12 +145,14 @@ func (c *Compiler) collectComment(s string) {
 }
 
 // nodeValue encodes a value and attaches any pending or inline comments.
-func (c *Compiler) nodeValue(v interface{}, inline *string) *yaml.Node {
+func (c *Compiler) nodeValue(v interface{}, inline *string) (*yaml.Node, error) {
 	if v == nil {
-		return nil
+		return nil, nil
 	}
 	var node yaml.Node
-	node.Encode(v)
+	if err := node.Encode(v); err != nil {
+		return nil, err
+	}
 	if len(c.pendingComments) > 0 {
 		node.HeadComment = strings.Join(c.pendingComments, "\n")
 		c.pendingComments = nil
@@ -145,13 +160,18 @@ func (c *Compiler) nodeValue(v interface{}, inline *string) *yaml.Node {
 	if inline != nil {
 		node.LineComment = strings.TrimSpace(strings.TrimPrefix(*inline, "#"))
 	}
-	return &node
+	return &node, nil
 }
 
 // addNodeMapEntry adds a key-value pair to a MappingNode, preserving comment context.
-func (c *Compiler) addNodeMapEntry(mapNode *yaml.Node, key string, val interface{}, inline *string) {
+func (c *Compiler) addNodeMapEntry(mapNode *yaml.Node, key string, val interface{}, inline *string) error {
+	if mapNode == nil {
+		return fmt.Errorf("mapNode is nil")
+	}
 	var keyNode yaml.Node
-	keyNode.Encode(key)
+	if err := keyNode.Encode(key); err != nil {
+		return err
+	}
 	if len(c.pendingComments) > 0 {
 		keyNode.HeadComment = strings.Join(c.pendingComments, "\n")
 		c.pendingComments = nil
@@ -161,8 +181,13 @@ func (c *Compiler) addNodeMapEntry(mapNode *yaml.Node, key string, val interface
 	}
 
 	var valNode yaml.Node
-	valNode.Encode(val)
+	if node, ok := val.(*yaml.Node); ok {
+		valNode = *node
+	} else if err := valNode.Encode(val); err != nil {
+		return err
+	}
 	mapNode.Content = append(mapNode.Content, &keyNode, &valNode)
+	return nil
 }
 
 func (c *Compiler) processParameter(p *parser.ParameterBlock) error {
@@ -202,7 +227,10 @@ func (c *Compiler) processParameter(p *parser.ParameterBlock) error {
 		param.Schema.Description = desc
 	}
 
-	node := c.nodeValue(param, nil)
+	node, err := c.nodeValue(param, nil)
+	if err != nil {
+		return err
+	}
 	c.output.Parameters.Content = append(c.output.Parameters.Content, node)
 	return nil
 }
@@ -231,12 +259,15 @@ func (c *Compiler) processTransformer(t *parser.TransformerBlock) error {
 			}
 		}
 	}
-	node := c.nodeValue(trans, t.InlineComment)
+	node, err := c.nodeValue(trans, t.InlineComment)
+	if err != nil {
+		return err
+	}
 	c.output.Transformers.Content = append(c.output.Transformers.Content, node)
 	return nil
 }
 
-func (c *Compiler) processRequire(u *parser.RequireStmt) {
+func (c *Compiler) processRequire(u *parser.RequireStmt) error {
 	tool := &ToolYAML{}
 	if u.Search {
 		tool.Type = "internet_search"
@@ -263,9 +294,10 @@ func (c *Compiler) processRequire(u *parser.RequireStmt) {
 			Name: tool.Name,
 		})
 	}
+	return nil
 }
 
-func (c *Compiler) processUse(u *parser.UseStmt, sessNode *yaml.Node) {
+func (c *Compiler) processUse(u *parser.UseStmt, sessNode *yaml.Node) error {
 	tool := &ToolYAML{}
 	if u.Search {
 		tool.Type = "internet_search"
@@ -280,9 +312,17 @@ func (c *Compiler) processUse(u *parser.UseStmt, sessNode *yaml.Node) {
 
 	// If in a session, add to session tools
 	if sessNode != nil {
-		toolsNode := c.ensureNodeSeqField(sessNode, "tools")
-		toolsNode.Content = append(toolsNode.Content, c.nodeValue(tool, u.InlineComment))
+		toolsNode, err := c.ensureNodeSeqField(sessNode, "tools")
+		if err != nil {
+			return err
+		}
+		nv, err := c.nodeValue(tool, u.InlineComment)
+		if err != nil {
+			return err
+		}
+		toolsNode.Content = append(toolsNode.Content, nv)
 	}
+	return nil
 }
 
 func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
@@ -314,24 +354,31 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 			}
 			c.output.Components.Schemas[item.Schema.Name] = schema
 		} else if item.Prompt != nil {
-			c.output.Components.Prompts[item.Prompt.Name] = c.nodeValue(item.Prompt.Value, nil)
+			node, err := c.nodeValue(item.Prompt.Value, nil)
+			if err != nil {
+				return err
+			}
+			c.output.Components.Prompts[item.Prompt.Name] = node
 		}
 	}
 	return nil
 }
 
-func (c *Compiler) getSessionNode(name string) *yaml.Node {
-	for i := 0; i < len(c.output.Sessions.Content); i += 2 {
+func (c *Compiler) getSessionNode(name string) (*yaml.Node, error) {
+	if c.output.Sessions == nil {
+		return nil, fmt.Errorf("sessions node is nil")
+	}
+	for i := 0; i+1 < len(c.output.Sessions.Content); i += 2 {
 		if c.output.Sessions.Content[i].Value == name {
-			return c.output.Sessions.Content[i+1]
+			return c.output.Sessions.Content[i+1], nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("session %q not found", name)
 }
 
 func (c *Compiler) processSession(s *parser.SessionBlock) error {
 	var sessNode *yaml.Node
-	for i := 0; i < len(c.output.Sessions.Content); i += 2 {
+	for i := 0; i+1 < len(c.output.Sessions.Content); i += 2 {
 		if c.output.Sessions.Content[i].Value == s.Name {
 			sessNode = c.output.Sessions.Content[i+1]
 			break
@@ -341,7 +388,9 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 	if sessNode == nil {
 		// New session: create key-value pair in MappingNode
 		var keyNode yaml.Node
-		keyNode.Encode(s.Name)
+		if err := keyNode.Encode(s.Name); err != nil {
+			return err
+		}
 		if len(c.pendingComments) > 0 {
 			keyNode.HeadComment = strings.Join(c.pendingComments, "\n")
 			c.pendingComments = nil
@@ -366,11 +415,17 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 	for _, attr := range s.Attributes {
 		switch attr.Type {
 		case "after":
-			c.addDependsOn(sessNode, attr.Value, "")
+			if err := c.addDependsOn(sessNode, attr.Value, ""); err != nil {
+				return err
+			}
 		case "expect":
-			c.addDependsOn(sessNode, "", attr.Value)
+			if err := c.addDependsOn(sessNode, "", attr.Value); err != nil {
+				return err
+			}
 		case "iterate":
-			c.setNodeMapField(sessNode, "iterateOn", attr.Value)
+			if err := c.setNodeMapField(sessNode, "iterateOn", attr.Value); err != nil {
+				return err
+			}
 		case "target":
 			c.sessionTargets[s.Name] = strings.Trim(attr.Value, "\"")
 		}
@@ -384,19 +439,35 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		case stmt.Comment != nil:
 			c.collectComment(*stmt.Comment)
 		case stmt.Set != nil:
-			varsNode := c.ensureNodeMapField(sessNode, "vars")
-			c.addNodeMapEntry(varsNode, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment)
+			varsNode, err := c.ensureNodeMapField(sessNode, "vars")
+			if err != nil {
+				return err
+			}
+			if err := c.addNodeMapEntry(varsNode, stmt.Set.Name, c.compileValue(stmt.Set.Value), stmt.Set.InlineComment); err != nil {
+				return err
+			}
 		case stmt.Use != nil:
-			c.processUse(stmt.Use, sessNode)
+			if err := c.processUse(stmt.Use, sessNode); err != nil {
+				return err
+			}
 		case stmt.Call != nil:
-			callsNode := c.ensureNodeSeqField(sessNode, "preCalls")
+			callsNode, err := c.ensureNodeSeqField(sessNode, "preCalls")
+			if err != nil {
+				return err
+			}
 			callNode, err := c.compileCallNode(stmt.Call)
 			if err != nil {
 				return err
 			}
 			callsNode.Content = append(callsNode.Content, callNode)
 		case stmt.Context != nil:
-			c.setNodeMapFieldNode(sessNode, "context", c.nodeValue(c.compileValue(stmt.Context.Value), stmt.Context.InlineComment))
+			node, err := c.nodeValue(c.compileValue(stmt.Context.Value), stmt.Context.InlineComment)
+			if err != nil {
+				return err
+			}
+			if err := c.setNodeMapFieldNode(sessNode, "context", node); err != nil {
+				return err
+			}
 		case stmt.Prompt != nil:
 			for _, item := range stmt.Prompt.Items {
 				if item.PrePrompt != nil {
@@ -449,85 +520,129 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 	}
 
 	if len(prePrompts) > 0 {
+		var node *yaml.Node
+		var err error
 		if len(prePrompts) == 1 {
-			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(prePrompts[0], nil))
+			node, err = c.nodeValue(prePrompts[0], nil)
 		} else {
-			c.setNodeMapFieldNode(sessNode, "prePrompt", c.nodeValue(prePrompts, nil))
+			node, err = c.nodeValue(prePrompts, nil)
+		}
+		if err != nil {
+			return err
+		}
+		if err := c.setNodeMapFieldNode(sessNode, "prePrompt", node); err != nil {
+			return err
 		}
 	}
 
 	if prompt != nil {
-		c.setNodeMapFieldNode(sessNode, "prompt", c.nodeValue(*prompt, nil))
+		node, err := c.nodeValue(*prompt, nil)
+		if err != nil {
+			return err
+		}
+		if err := c.setNodeMapFieldNode(sessNode, "prompt", node); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (c *Compiler) ensureNodeMapField(parent *yaml.Node, key string) *yaml.Node {
-	for i := 0; i < len(parent.Content); i += 2 {
+func (c *Compiler) ensureNodeMapField(parent *yaml.Node, key string) (*yaml.Node, error) {
+	if parent == nil {
+		return nil, fmt.Errorf("parent node is nil")
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
-			return parent.Content[i+1]
+			return parent.Content[i+1], nil
 		}
 	}
 	var kn, vn yaml.Node
-	kn.Encode(key)
+	if err := kn.Encode(key); err != nil {
+		return nil, err
+	}
 	vn.Kind = yaml.MappingNode
 	parent.Content = append(parent.Content, &kn, &vn)
-	return &vn
+	return &vn, nil
 }
 
-func (c *Compiler) ensureNodeSeqField(parent *yaml.Node, key string) *yaml.Node {
-	for i := 0; i < len(parent.Content); i += 2 {
+func (c *Compiler) ensureNodeSeqField(parent *yaml.Node, key string) (*yaml.Node, error) {
+	if parent == nil {
+		return nil, fmt.Errorf("parent node is nil")
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
-			return parent.Content[i+1]
+			return parent.Content[i+1], nil
 		}
 	}
 	var kn, vn yaml.Node
-	kn.Encode(key)
+	if err := kn.Encode(key); err != nil {
+		return nil, err
+	}
 	vn.Kind = yaml.SequenceNode
 	parent.Content = append(parent.Content, &kn, &vn)
-	return &vn
+	return &vn, nil
 }
 
-func (c *Compiler) setNodeMapField(parent *yaml.Node, key string, val interface{}) {
-	for i := 0; i < len(parent.Content); i += 2 {
+func (c *Compiler) setNodeMapField(parent *yaml.Node, key string, val interface{}) error {
+	if parent == nil {
+		return fmt.Errorf("parent node is nil")
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
 			if node, ok := val.(*yaml.Node); ok {
 				parent.Content[i+1] = node
-			} else {
-				parent.Content[i+1].Encode(val)
+				return nil
 			}
-			return
+			return parent.Content[i+1].Encode(val)
 		}
 	}
 	var kn yaml.Node
-	kn.Encode(key)
+	if err := kn.Encode(key); err != nil {
+		return err
+	}
 	if node, ok := val.(*yaml.Node); ok {
 		parent.Content = append(parent.Content, &kn, node)
 	} else {
 		var vn yaml.Node
-		vn.Encode(val)
+		if err := vn.Encode(val); err != nil {
+			return err
+		}
 		parent.Content = append(parent.Content, &kn, &vn)
 	}
+	return nil
 }
 
-func (c *Compiler) setNodeMapFieldNode(parent *yaml.Node, key string, vn *yaml.Node) {
-	for i := 0; i < len(parent.Content); i += 2 {
+func (c *Compiler) setNodeMapFieldNode(parent *yaml.Node, key string, vn *yaml.Node) error {
+	if parent == nil {
+		return fmt.Errorf("parent node is nil")
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
 			parent.Content[i+1] = vn
-			return
+			return nil
 		}
 	}
 	var kn yaml.Node
-	kn.Encode(key)
+	if err := kn.Encode(key); err != nil {
+		return err
+	}
 	parent.Content = append(parent.Content, &kn, vn)
+	return nil
 }
 
-func (c *Compiler) addDependsOn(sessNode *yaml.Node, session string, expression string) {
-	depsNode := c.ensureNodeSeqField(sessNode, "dependsOn")
+func (c *Compiler) addDependsOn(sessNode *yaml.Node, session string, expression string) error {
+	depsNode, err := c.ensureNodeSeqField(sessNode, "dependsOn")
+	if err != nil {
+		return err
+	}
 	if session != "" {
 		dep := &DependsOnYAML{Session: session}
-		depsNode.Content = append(depsNode.Content, c.nodeValue(dep, nil))
+		node, err := c.nodeValue(dep, nil)
+		if err != nil {
+			return err
+		}
+		depsNode.Content = append(depsNode.Content, node)
 	} else if expression != "" {
 		if len(depsNode.Content) > 0 {
 			last := depsNode.Content[len(depsNode.Content)-1]
@@ -540,13 +655,17 @@ func (c *Compiler) addDependsOn(sessNode *yaml.Node, session string, expression 
 				}
 			}
 			if !found {
-				c.addNodeMapEntry(last, "expression", expression, nil)
-				return
+				return c.addNodeMapEntry(last, "expression", expression, nil)
 			}
 		}
 		dep := &DependsOnYAML{Expression: expression}
-		depsNode.Content = append(depsNode.Content, c.nodeValue(dep, nil))
+		node, err := c.nodeValue(dep, nil)
+		if err != nil {
+			return err
+		}
+		depsNode.Content = append(depsNode.Content, node)
 	}
+	return nil
 }
 
 func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
@@ -571,7 +690,7 @@ func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
 			y.Code = strings.TrimSpace(*field.Code)
 		}
 	}
-	return c.nodeValue(y, call.InlineComment), nil
+	return c.nodeValue(y, call.InlineComment)
 }
 
 func (c *Compiler) cleanPromptItem(s string) string {

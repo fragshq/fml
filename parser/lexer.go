@@ -392,7 +392,7 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 	}
 
 	token := lexer.Token{
-		Type:  lexer.TokenType(typ),
+		Type:  typ,
 		Value: val,
 		Pos:   startPos,
 	}

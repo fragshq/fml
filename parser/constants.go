@@ -18,8 +18,8 @@ const (
 	TokenPrePromptItem lexer.TokenType = -13
 )
 
+// Token Symbol Names
 const (
-	// Token Symbol Names
 	SymComment       = "Comment"
 	SymInlineComment = "InlineComment"
 	SymString        = "String"
@@ -35,16 +35,18 @@ const (
 	SymEOF           = "EOF"
 )
 
+// JSON Schema types
 const (
-	// JSON Schema types
 	TypeObject  = "object"
 	TypeArray   = "array"
 	TypeString  = "string"
 	TypeInteger = "integer"
 	TypeNumber  = "number"
 	TypeBoolean = "boolean"
+)
 
-	// DSL Scalar types
+// DSL Scalar types
+const (
 	ScalarString = "string"
 	ScalarInt    = "int"
 	ScalarFloat  = "float"

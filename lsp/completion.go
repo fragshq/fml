@@ -14,12 +14,12 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 	}
 
 	lines := strings.Split(text, "\n")
-	if int(params.Position.Line) >= len(lines) {
+	if params.Position.Line >= len(lines) {
 		return nil, nil
 	}
 
 	currentLine := lines[params.Position.Line]
-	charPos := int(params.Position.Character)
+	charPos := params.Position.Character
 	if charPos > len(currentLine) {
 		charPos = len(currentLine)
 	}

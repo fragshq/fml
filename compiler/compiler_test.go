@@ -55,8 +55,8 @@ session("loop", iterate=context.items) {
 	assert.NoError(t, err)
 
 	loopSchema := schema.Properties["loop"]
-	assert.Equal(t, "array", loopSchema.Type)
-	assert.Equal(t, "object", loopSchema.Items.Type)
+	assert.Equal(t, parser.TypeArray, loopSchema.Type)
+	assert.Equal(t, parser.TypeObject, loopSchema.Items.Type)
 }
 
 func TestCompiler_ValidationErrors(t *testing.T) {
@@ -131,7 +131,7 @@ session("report", after="gather", iterate=gather.ids) {
 	// Verify iterate wrapping
 	var schema JSONSchema
 	out.Schema.Decode(&schema)
-	assert.Equal(t, "array", schema.Properties["report"].Type)
+	assert.Equal(t, parser.TypeArray, schema.Properties["report"].Type)
 }
 
 func TestCompiler_TargetRenaming(t *testing.T) {
@@ -177,7 +177,7 @@ session("process", after="gather", iterate=gather.ids, target="processed_items")
 
 	// Verify it is still an array because of 'iterate'
 	prop := schema.Properties["processed_items"]
-	assert.Equal(t, "array", prop.Type)
+	assert.Equal(t, parser.TypeArray, prop.Type)
 	assert.Equal(t, "process", prop.XSession)
 }
 

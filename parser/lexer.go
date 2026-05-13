@@ -25,19 +25,19 @@ func (d *FRAGSLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, e
 
 func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 	return map[string]lexer.TokenType{
-		"Comment":       -2,
-		"InlineComment": -10,
-		"String":        -3,
-		"Number":        -4,
-		"Bool":          -5,
-		"Ident":         -6,
-		"Punct":         -7,
-		"Whitespace":    -8,
-		"PromptItem":    -9,
-		"PrePromptItem": -13,
-		"AttrValue":     -11,
-		"CodeValue":     -12,
-		"EOF":           -1,
+		SymComment:       TokenComment,
+		SymInlineComment: TokenInlineComment,
+		SymString:        TokenString,
+		SymNumber:        TokenNumber,
+		SymBool:          TokenBool,
+		SymIdent:         TokenIdent,
+		SymPunct:         TokenPunct,
+		SymWhitespace:    TokenWhitespace,
+		SymPromptItem:    TokenPromptItem,
+		SymPrePromptItem: TokenPrePromptItem,
+		SymAttrValue:     TokenAttrValue,
+		SymCodeValue:     TokenCodeValue,
+		SymEOF:           TokenEOF,
 	}
 }
 
@@ -55,26 +55,26 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 	for {
 		if l.pos.Column == 1 {
 			i := 0
-			for i < len(l.s) && (l.s[i] == ' ' || l.s[i] == '\t') {
+			for l.isSpace(i) {
 				i++
 			}
-			isPrompt := i < len(l.s) && l.s[i] == '-' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r')
-			isPrePrompt := i < len(l.s) && l.s[i] == '+' && (i+1 == len(l.s) || l.s[i+1] == ' ' || l.s[i+1] == '\n' || l.s[i+1] == '\r')
+			isPrompt := l.isAtMarker('-', i)
+			isPrePrompt := l.isAtMarker('+', i)
 
 			if isPrompt || isPrePrompt {
 				t, err := l.consumePromptItem(i, isPrePrompt)
 				return t, err
 			}
 
-			if i < len(l.s) && l.s[i] == '#' {
+			if l.isAt(i, '#') {
 				l.s = l.s[i:]
 				l.pos.Column += i
-				return l.consumeComment("Comment"), nil
+				return l.consumeComment(SymComment), nil
 			}
 		}
 
 		i := 0
-		for i < len(l.s) && (l.s[i] == ' ' || l.s[i] == '\t') {
+		for l.isSpace(i) {
 			i++
 		}
 		if i > 0 {
@@ -86,7 +86,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			return lexer.EOFToken(l.pos), nil
 		}
 
-		if l.s[0] == '\n' || l.s[0] == '\r' {
+		if l.isNewline(0) {
 			l.consumeNewline()
 			l.lastIdent = ""
 			continue
@@ -96,13 +96,13 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 
 	if l.expectingAttrValue {
 		l.expectingAttrValue = false
-		if l.s[0] != '"' {
+		if !l.isAt(0, '"') {
 			i := 0
-			for i < len(l.s) && l.s[i] != ',' && l.s[i] != ')' && l.s[i] != '\n' && l.s[i] != '\r' {
+			for i < len(l.s) && l.s[i] != ',' && l.s[i] != ')' && !l.isNewline(i) {
 				i++
 			}
 			val := strings.TrimSpace(l.s[:i])
-			t := l.consume(i, "AttrValue")
+			t := l.consume(i, SymAttrValue)
 			t.Value = val
 			return t, nil
 		}
@@ -114,7 +114,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		if err != nil {
 			return t, err
 		}
-		t.Type = -12 // CodeValue
+		t.Type = TokenCodeValue
 		return t, nil
 	}
 
@@ -124,18 +124,18 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		r := l.s[0]
 		switch {
 		case r == '#':
-			t = l.consumeComment("InlineComment")
+			t = l.consumeComment(SymInlineComment)
 		case r == '"':
 			t, err = l.consumeString()
 			l.lastIdent = ""
 		case unicode.IsDigit(rune(r)) || r == '-' || r == '+':
 			if r == '-' {
 				if strings.HasPrefix(l.s, "->") {
-					t = l.consume(2, "Punct")
+					t = l.consume(2, SymPunct)
 				} else if len(l.s) > 1 && unicode.IsDigit(rune(l.s[1])) {
 					t, err = l.consumeNumber()
 				} else {
-					t = l.consume(1, "Punct")
+					t = l.consume(1, SymPunct)
 				}
 			} else {
 				t, err = l.consumeNumber()
@@ -146,16 +146,16 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			l.lastIdent = t.Value
 		case strings.ContainsRune("][{}():,=|?$-", rune(r)):
 			if strings.HasPrefix(l.s, "->") {
-				t = l.consume(2, "Punct")
+				t = l.consume(2, SymPunct)
 				l.lastIdent = ""
 			} else if strings.HasPrefix(l.s, "$(") {
-				t = l.consume(2, "Punct")
+				t = l.consume(2, SymPunct)
 				l.expectingCode = true
 				l.lastIdent = ""
 			} else {
-				t = l.consume(1, "Punct")
+				t = l.consume(1, SymPunct)
 				if t.Value == "=" {
-					if l.lastIdent == "expect" || l.lastIdent == "iterate" || l.lastIdent == "after" {
+					if l.isSessionAttribute(l.lastIdent) {
 						l.expectingAttrValue = true
 					}
 				} else if t.Value == "(" {
@@ -209,7 +209,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 	}
 
 	return lexer.Token{
-		Type:  -7,
+		Type:  TokenPunct,
 		Value: val,
 		Pos:   startPos,
 	}, nil
@@ -239,37 +239,37 @@ func (l *fragsLexer) consume(n int, typ string) lexer.Token {
 
 func (l *fragsLexer) typeToToken(typ string) lexer.TokenType {
 	switch typ {
-	case "Comment":
-		return -2
-	case "InlineComment":
-		return -10
-	case "String":
-		return -3
-	case "Number":
-		return -4
-	case "Bool":
-		return -5
-	case "Ident":
-		return -6
-	case "Punct":
-		return -7
-	case "Whitespace":
-		return -8
-	case "PromptItem":
-		return -9
-	case "PrePromptItem":
-		return -13
-	case "AttrValue":
-		return -11
-	case "CodeValue":
-		return -12
+	case SymComment:
+		return TokenComment
+	case SymInlineComment:
+		return TokenInlineComment
+	case SymString:
+		return TokenString
+	case SymNumber:
+		return TokenNumber
+	case SymBool:
+		return TokenBool
+	case SymIdent:
+		return TokenIdent
+	case SymPunct:
+		return TokenPunct
+	case SymWhitespace:
+		return TokenWhitespace
+	case SymPromptItem:
+		return TokenPromptItem
+	case SymPrePromptItem:
+		return TokenPrePromptItem
+	case SymAttrValue:
+		return TokenAttrValue
+	case SymCodeValue:
+		return TokenCodeValue
 	}
-	return -1
+	return TokenEOF
 }
 
 func (l *fragsLexer) consumeComment(typ string) lexer.Token {
 	i := 0
-	for i < len(l.s) && l.s[i] != '\n' && l.s[i] != '\r' {
+	for i < len(l.s) && !l.isNewline(i) {
 		i++
 	}
 	return l.consume(i, typ)
@@ -279,10 +279,10 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 	startPos := l.pos
 	i := 1
 	for i < len(l.s) {
-		if l.s[i] == '\n' || l.s[i] == '\r' {
+		if l.isNewline(i) {
 			return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
 		}
-		if l.s[i] == '\\' {
+		if l.isAt(i, '\\') {
 			if i+1 >= len(l.s) {
 				return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
 			}
@@ -293,14 +293,14 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 			i += 2
 			continue
 		}
-		if l.s[i] == '"' {
+		if l.isAt(i, '"') {
 			val := l.s[:i+1]
 			// Validate template tags {{ }} are balanced
 			if strings.Count(val, "{{") != strings.Count(val, "}}") {
 				return lexer.Token{}, fmt.Errorf("%s: malformed template tags in string", startPos)
 			}
 			i++
-			return l.consume(i, "String"), nil
+			return l.consume(i, SymString), nil
 		}
 		i++
 	}
@@ -310,12 +310,12 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
 	startPos := l.pos
 	i := 0
-	if l.s[i] == '-' || l.s[i] == '+' {
+	if l.isAt(i, '-') || l.isAt(i, '+') {
 		i++
 	}
 	dots := 0
-	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.s[i] == '.') {
-		if l.s[i] == '.' {
+	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.isAt(i, '.')) {
+		if l.isAt(i, '.') {
 			dots++
 			if dots > 1 {
 				return lexer.Token{}, fmt.Errorf("%s: malformed number (multiple decimal points)", startPos)
@@ -323,29 +323,29 @@ func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
 		}
 		i++
 	}
-	if l.s[i-1] == '.' {
+	if l.isAt(i-1, '.') {
 		return lexer.Token{}, fmt.Errorf("%s: malformed number (trailing decimal point)", startPos)
 	}
-	return l.consume(i, "Number"), nil
+	return l.consume(i, SymNumber), nil
 }
 
 func (l *fragsLexer) consumeIdent() lexer.Token {
 	i := 0
-	for i < len(l.s) && (unicode.IsLetter(rune(l.s[i])) || unicode.IsDigit(rune(l.s[i])) || l.s[i] == '_') {
+	for l.isIdentChar(i) {
 		i++
 	}
 	val := l.s[:i]
-	if val == "true" || val == "false" {
-		return l.consume(i, "Bool")
+	if l.isBool(val) {
+		return l.consume(i, SymBool)
 	}
-	return l.consume(i, "Ident")
+	return l.consume(i, SymIdent)
 }
 
 func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Token, error) {
 	startPos := l.pos
 	dashCol := indent + 1
 	i := 0
-	for i < len(l.s) && l.s[i] != '\n' && l.s[i] != '\r' {
+	for i < len(l.s) && !l.isNewline(i) {
 		i++
 	}
 
@@ -358,20 +358,20 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 		j := nextStart
 		if strings.HasPrefix(l.s[j:], "\r\n") {
 			j += 2
-		} else if l.s[j] == '\n' || l.s[j] == '\r' {
+		} else if l.isNewline(j) {
 			j++
 		} else {
 			break
 		}
 
 		k := 0
-		for j+k < len(l.s) && (l.s[j+k] == ' ' || l.s[j+k] == '\t') {
+		for l.isSpace(j + k) {
 			k++
 		}
 
-		if j+k < len(l.s) && l.s[j+k] != '\n' && l.s[j+k] != '\r' && k > dashCol {
+		if j+k < len(l.s) && !l.isNewline(j+k) && k > dashCol {
 			j += k
-			for j < len(l.s) && l.s[j] != '\n' && l.s[j] != '\r' {
+			for j < len(l.s) && !l.isNewline(j) {
 				j++
 			}
 			totalLen = j
@@ -386,9 +386,9 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 		return lexer.Token{}, fmt.Errorf("%s: malformed template tags in prompt item", startPos)
 	}
 
-	typ := -9
+	typ := TokenPromptItem
 	if isPrePrompt {
-		typ = -13
+		typ = TokenPrePromptItem
 	}
 
 	token := lexer.Token{

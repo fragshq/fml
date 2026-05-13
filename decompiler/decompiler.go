@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/theirish/fml/compiler"
+	"github.com/theirish/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -286,7 +287,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	if len(schemas) > 0 {
 		isIterated := it != nil
 		for propName, s := range schemas {
-			if isIterated && s.Type == "array" && s.Items != nil {
+			if isIterated && s.Type == parser.TypeArray && s.Items != nil {
 				s = s.Items
 			}
 
@@ -295,7 +296,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 				opt = "?"
 			}
 
-			if s.Type == "object" && len(s.Properties) > 0 {
+			if s.Type == parser.TypeObject && len(s.Properties) > 0 {
 				sb.WriteString(fmt.Sprintf("    schema%s {\n", opt))
 				d.writeSchemaFields(sb, s, "        ")
 				sb.WriteString("    }\n")
@@ -348,16 +349,16 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) string {
 		return strings.Join(vals, "|")
 	}
 	switch s.Type {
-	case "integer":
+	case parser.TypeInteger:
 		return "int"
-	case "number":
+	case parser.TypeNumber:
 		return "float"
-	case "array":
+	case parser.TypeArray:
 		if s.Items != nil {
 			return d.formatType(s.Items) + "[]"
 		}
 		return "any[]"
-	case "object":
+	case parser.TypeObject:
 		if len(s.Properties) == 0 {
 			return "any"
 		}

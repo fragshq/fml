@@ -34,7 +34,7 @@ func New(plan *parser.Plan) *Compiler {
 // Compile orchestrates the transformation, accurately mapping DSL structures to YAML nodes.
 func (c *Compiler) Compile() (*PlanYAML, error) {
 	rootSchema := &JSONSchema{
-		Type:       "object",
+		Type:       parser.TypeObject,
 		Properties: make(map[string]*JSONSchema),
 	}
 
@@ -101,7 +101,7 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 
 		if iterateOn != "" && !c.isTypeArray(schema) {
 			schema = &JSONSchema{
-				Type:  "array",
+				Type:  parser.TypeArray,
 				Items: schema,
 			}
 		}
@@ -295,7 +295,7 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 	for _, item := range comp.Items {
 		if item.Schema != nil {
 			schema := &JSONSchema{
-				Type:       "object",
+				Type:       parser.TypeObject,
 				Properties: make(map[string]*JSONSchema),
 			}
 			for _, field := range item.Schema.Fields {
@@ -357,7 +357,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 
 	if _, exists := c.sessionSchemas[s.Name]; !exists {
 		c.sessionSchemas[s.Name] = &JSONSchema{
-			Type:       "object",
+			Type:       parser.TypeObject,
 			Properties: make(map[string]*JSONSchema),
 		}
 	}
@@ -420,7 +420,7 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			}
 
 			// If it's a plain object (not array, not ref), we merge fields
-			if compiled.Type == "object" && compiled.Items == nil && compiled.Ref == "" && len(compiled.Enum) == 0 {
+			if compiled.Type == parser.TypeObject && compiled.Items == nil && compiled.Ref == "" && len(compiled.Enum) == 0 {
 				// Refresh sessSchema in case it was replaced by anonymous type
 				sessSchema = c.sessionSchemas[s.Name]
 				if sessSchema.Properties == nil {
@@ -618,7 +618,7 @@ func (c *Compiler) compileType(t *parser.TypeExpr) (*JSONSchema, error) {
 		return nil, err
 	}
 	if t.Suffix {
-		schema = &JSONSchema{Type: "array", Items: schema}
+		schema = &JSONSchema{Type: parser.TypeArray, Items: schema}
 	}
 	return schema, nil
 }
@@ -630,17 +630,17 @@ func (c *Compiler) compileTypeBase(t *parser.TypeBase) (*JSONSchema, error) {
 	switch {
 	case t.Scalar != nil:
 		st := *t.Scalar
-		if st == "int" {
-			st = "integer"
-		} else if st == "float" {
-			st = "number"
+		if st == parser.ScalarInt {
+			st = parser.TypeInteger
+		} else if st == parser.ScalarFloat {
+			st = parser.TypeNumber
 		}
-		if st == "any" {
+		if st == parser.ScalarAny {
 			return &JSONSchema{}, nil
 		}
 		return &JSONSchema{Type: st}, nil
 	case t.Object != nil:
-		schema := &JSONSchema{Type: "object", Properties: make(map[string]*JSONSchema)}
+		schema := &JSONSchema{Type: parser.TypeObject, Properties: make(map[string]*JSONSchema)}
 		for _, field := range t.Object.Fields {
 			if _, exists := schema.Properties[field.Name]; exists {
 				return nil, fmt.Errorf("field %q already defined", field.Name)
@@ -666,7 +666,7 @@ func (c *Compiler) compileTypeBase(t *parser.TypeBase) (*JSONSchema, error) {
 		for i, e := range t.Enum {
 			enum[i] = e
 		}
-		return &JSONSchema{Type: "string", Enum: enum}, nil
+		return &JSONSchema{Type: parser.TypeString, Enum: enum}, nil
 	}
 	return &JSONSchema{}, nil
 }
@@ -709,14 +709,14 @@ func (c *Compiler) resolveDescription(leading []string, inline *string) string {
 }
 
 func (c *Compiler) isTypeArray(s *JSONSchema) bool {
-	if s.Type == "array" {
+	if s.Type == parser.TypeArray {
 		return true
 	}
 	if s.Ref != "" {
 		name := strings.TrimPrefix(s.Ref, "#/components/schemas/")
 		if c.output.Components != nil && c.output.Components.Schemas != nil {
 			if comp, ok := c.output.Components.Schemas[name]; ok {
-				return comp.Type == "array"
+				return comp.Type == parser.TypeArray
 			}
 		}
 	}

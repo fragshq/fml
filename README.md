@@ -1,6 +1,6 @@
-# Frags DSL (FML)
+# FML (Frags Modeling Language)
 
-Frags DSL (FML) is a compact, human-readable Domain Specific Language designed for defining complex LLM pipelines. It compiles to structured Frags YAML plans, enabling structured outputs, tool integration, and iterative multi-session workflows.
+FML is a compact, human-readable Domain Specific Language designed for defining complex LLM pipelines. It compiles to structured Frags YAML plans, enabling structured outputs, tool integration, and iterative multi-session workflows.
 
 ## Features
 

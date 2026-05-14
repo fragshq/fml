@@ -1,4 +1,4 @@
-package main
+package lsp
 
 func ptr[T any](v T) *T {
 	return &v

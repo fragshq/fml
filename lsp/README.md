@@ -1,44 +1,38 @@
-# FML Language Server
+# FML Language Server Library
 
-This is a Language Server Protocol (LSP) server for the Frags DSL (FML).
+This is a Language Server Protocol (LSP) library for the Frags DSL (FML). It can be integrated into other Go applications to provide LSP capabilities.
 
 ## Features
 - **Real-time Diagnostics**: Reports syntax errors as you type.
-- **Hover Support**: Basic hover capability (placeholder).
-
-## Building
-To build the LSP server, run:
-```bash
-go build -o fml-lsp .
-```
+- **Hover Support**: Basic hover capability.
+- **Semantic Tokens**: Syntax highlighting support.
+- **Completions**: Smart completion suggestions.
 
 ## Usage
-The server supports multiple transport modes, which can be enabled via environment variables.
 
-### Stdio (Default)
-If no environment variables are set, the server communicates via standard input/output.
-```bash
-./fml-lsp
+As a library, you can run the LSP server in various modes:
+
+### Stdio
+Suitable for integration with most editors (VS Code, Vim, etc.).
+```go
+import "github.com/theirish81/fml/lsp"
+
+// ...
+err := lsp.RunStdio(context.Background())
 ```
 
-### TCP (Internet Service)
-Set `JSON_RPC_PORT` to listen on a TCP address for remote connections.
-```bash
-JSON_RPC_PORT=7100 ./fml-lsp
+### TCP
+Listen on a TCP port.
+```go
+err := lsp.RunTCP(context.Background(), ":7100")
 ```
 
-### WebSocket (Web-based Editors)
-Set `WEBSOCKET_PORT` to listen on a WebSocket address for browser-based editor integrations.
-```bash
-WEBSOCKET_PORT=7101 ./fml-lsp
-```
-
-### Simultaneous Execution
-Both TCP and WebSocket modes can be enabled at the same time:
-```bash
-JSON_RPC_PORT=7100 WEBSOCKET_PORT=7101 ./fml-lsp
+### WebSocket
+Listen on a WebSocket port (e.g., for browser-based editors).
+```go
+err := lsp.RunWS(context.Background(), ":7101")
 ```
 
 ## Dependencies
 - `github.com/owenrumney/go-lsp`: LSP 3.17 implementation.
-- `github.com/theirish/fml`: The core FML parser and compiler (imported via local replace).
+- `github.com/theirish81/fml`: The core FML parser and compiler.

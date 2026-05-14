@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/owenrumney/go-lsp/lsp"
-	"github.com/theirish/fml/parser"
+	"github.com/theirish81/fml/parser"
 )
 
 func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.SemanticTokensParams) (*lsp.SemanticTokens, error) {

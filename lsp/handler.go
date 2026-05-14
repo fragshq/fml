@@ -7,7 +7,7 @@ import (
 
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
-	"github.com/theirish/fml/parser"
+	"github.com/theirish81/fml/parser"
 )
 
 type FMLHandler struct {

@@ -1,14 +1,12 @@
-module github.com/theirish/fml/lsp
+module github.com/theirish81/fml/lsp
 
 go 1.25.4
-
-replace github.com/theirish/fml v0.0.0-00010101000000-000000000000 => ../
 
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/owenrumney/go-lsp v0.2.2
 	github.com/stretchr/testify v1.11.1
-	github.com/theirish/fml v0.0.0-00010101000000-000000000000
+	github.com/theirish81/fml v0.0.0-20260514091838-e6b1f33261ab
 )
 
 require (

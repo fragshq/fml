@@ -127,6 +127,7 @@ func sessionKeywordCompletions() []lsp.CompletionItem {
 		{Label: "use", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "use <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a tool requirement for the session."}},
 		{Label: "allowlist =", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "allowlist = [\"...\"]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Restricts the tools available from a server or collection."}},
 		{Label: "call", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "call(\"...\") [-> var] [{ ... }]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Invokes a tool or function. The fields block is optional."}},
+		{Label: "resource", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "resource \"...\" [-> [ns:]var]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Specifies an external file or data source to be associated with the session."}},
 		{Label: "context", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "context ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the session context."}},
 		{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines the output structure for the session."}},
 		{Label: "schema?", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema? { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an optional output structure for the session."}},

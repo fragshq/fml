@@ -466,6 +466,16 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 				return err
 			}
 			callsNode.Content = append(callsNode.Content, callNode)
+		case stmt.Resource != nil:
+			resNode, err := c.ensureNodeSeqField(sessNode, "resources")
+			if err != nil {
+				return err
+			}
+			rn, err := c.compileResourceNode(stmt.Resource)
+			if err != nil {
+				return err
+			}
+			resNode.Content = append(resNode.Content, rn)
 		case stmt.Context != nil:
 			node, err := c.nodeValue(c.compileValue(stmt.Context.Value), stmt.Context.InlineComment)
 			if err != nil {
@@ -697,6 +707,21 @@ func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
 		}
 	}
 	return c.nodeValue(y, call.InlineComment)
+}
+
+func (c *Compiler) compileResourceNode(r *parser.ResourceStmt) (*yaml.Node, error) {
+	y := &ResourceYAML{
+		Identifier: r.Identifier,
+	}
+	if r.Target != nil {
+		if r.Target.Namespace != nil {
+			y.In = *r.Target.Namespace
+		} else {
+			y.In = "vars"
+		}
+		y.Var = r.Target.Name
+	}
+	return c.nodeValue(y, r.InlineComment)
 }
 
 func (c *Compiler) cleanPromptItem(s string) string {

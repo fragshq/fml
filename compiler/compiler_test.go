@@ -444,3 +444,49 @@ func TestCompiler_UseWithAllowlist(t *testing.T) {
 	assert.Equal(t, "tool1", tool.Name)
 	assert.Equal(t, []string{"m1", "m2"}, tool.Allowlist)
 }
+
+func TestCompiler_Resources(t *testing.T) {
+	input := `
+session("s") {
+  resource "data.csv"
+  resource "prompt.txt" -> vars:template
+  resource "config.json" -> myConfig
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	sessNode := out.Sessions.Content[1]
+	var resNode *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "resources" {
+			resNode = sessNode.Content[i+1]
+			break
+		}
+	}
+	require.NotNil(t, resNode)
+	assert.Equal(t, 3, len(resNode.Content))
+
+	type Res struct {
+		Identifier string `yaml:"identifier"`
+		In         string `yaml:"in"`
+		Var        string `yaml:"var"`
+	}
+
+	var r1, r2, r3 Res
+	_ = resNode.Content[0].Decode(&r1)
+	_ = resNode.Content[1].Decode(&r2)
+	_ = resNode.Content[2].Decode(&r3)
+
+	assert.Equal(t, "data.csv", r1.Identifier)
+	assert.Empty(t, r1.In)
+	assert.Empty(t, r1.Var)
+
+	assert.Equal(t, "prompt.txt", r2.Identifier)
+	assert.Equal(t, "vars", r2.In)
+	assert.Equal(t, "template", r2.Var)
+
+	assert.Equal(t, "config.json", r3.Identifier)
+	assert.Equal(t, "vars", r3.In)
+	assert.Equal(t, "myConfig", r3.Var)
+}

@@ -286,6 +286,29 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 		}
 	}
 
+	// Resources
+	resources := d.getMapValue(sessNode, "resources")
+	if resources != nil {
+		for _, rNode := range resources.Content {
+			idNode := d.getMapValue(rNode, "identifier")
+			if idNode == nil {
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("    resource %q", idNode.Value))
+
+			in := d.getMapValue(rNode, "in")
+			target := d.getMapValue(rNode, "var")
+			if target != nil {
+				if in != nil && in.Value != "vars" {
+					sb.WriteString(fmt.Sprintf(" -> %s:%s", in.Value, target.Value))
+				} else {
+					sb.WriteString(fmt.Sprintf(" -> %s", target.Value))
+				}
+			}
+			sb.WriteString("\n")
+		}
+	}
+
 	// Calls
 	calls := d.getMapValue(sessNode, "preCalls")
 	if calls != nil {

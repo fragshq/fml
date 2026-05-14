@@ -79,6 +79,7 @@ var languageDocs = map[string]string{
 	"use":         "**use <type> <name> [{ allowlist = [...] }]**\n\nDeclares a tool requirement for the session. Supported types: `mcp`, `apicp`, `collection`, `function`, `search`. An optional block can restrict available tools using an `allowlist`.",
 	"allowlist":   "**allowlist = [\"tool1\", \"tool2\", ...]**\n\nRestricts the tools available from an MCP server, API collection, or other tool provider to a specific set of named tools.",
 	"call":        "**call(\"name\") [-> [ns:]var] [{ ... }]**\n\nInvokes a tool or transformer. The output can be optionally mapped to a variable. The arguments block `{ ... }` is optional.",
+	"resource":    "**resource \"identifier\" [-> [ns:]var]**\n\nSpecifies an external file or data source to be associated with the session. The resource can be optionally mapped to a variable.",
 	"context":     "**context ...**\n\nSets the prompt context for the session. Can be a boolean or a string template.",
 	"schema":      "**schema { ... }** or **schema Type**\n\nDefines the output structure for the session. Properties are merged into the session's object if using the `{}` syntax.",
 	"schema?":     "**schema? ...**\n\nDefines an optional output structure. The session's property will not be marked as required in the root schema.",

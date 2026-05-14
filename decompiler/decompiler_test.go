@@ -222,3 +222,37 @@ func TestDecompiler_UseWithAllowlist(t *testing.T) {
 	y2, _ := yaml.Marshal(planYAML2)
 	assert.Equal(t, string(y1), string(y2))
 }
+
+func TestDecompiler_Resources(t *testing.T) {
+	input := `session("s") {
+    resource "data.csv"
+    resource "prompt.txt" -> vars:template
+    resource "config.json" -> myConfig
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `resource "data.csv"`)
+	assert.Contains(t, output, `resource "prompt.txt" -> template`)
+	assert.Contains(t, output, `resource "config.json" -> myConfig`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	if err != nil {
+		t.Fatalf("Failed to parse decompiled output: %v\nOutput was:\n%s", err, output)
+	}
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}

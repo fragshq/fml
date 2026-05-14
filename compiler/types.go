@@ -80,6 +80,12 @@ type CallYAML struct {
 	Var  string                 `yaml:"var,omitempty"`
 }
 
+type ResourceYAML struct {
+	Identifier string `yaml:"identifier"`
+	In         string `yaml:"in,omitempty"`
+	Var        string `yaml:"var,omitempty"`
+}
+
 type SessionYAML struct {
 	DependsOn []*DependsOnYAML `yaml:"dependsOn,omitempty"`
 	IterateOn string           `yaml:"iterateOn,omitempty"`

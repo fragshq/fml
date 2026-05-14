@@ -139,13 +139,20 @@ type SessionAttr struct {
 }
 
 type SessionStmt struct {
-	Comment *string      `@Comment`
-	Set     *SetStmt     `| @@`
-	Use     *UseStmt     `| @@`
-	Call    *CallBlock   `| @@`
-	Context *ContextStmt `| @@`
-	Schema  *SchemaBlock `| @@`
-	Prompt  *PromptLines `| @@`
+	Comment  *string       `@Comment`
+	Set      *SetStmt      `| @@`
+	Use      *UseStmt      `| @@`
+	Call     *CallBlock    `| @@`
+	Context  *ContextStmt  `| @@`
+	Resource *ResourceStmt `| @@`
+	Schema   *SchemaBlock  `| @@`
+	Prompt   *PromptLines  `| @@`
+}
+
+type ResourceStmt struct {
+	Identifier    string      `"resource" @String`
+	Target        *CallTarget `("->" @@)?`
+	InlineComment *string     `@InlineComment?`
 }
 
 type UseStmt struct {

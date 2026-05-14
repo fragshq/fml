@@ -25,6 +25,7 @@
    - 5.5 `context`
    - 5.6 Prompt Lines
    - 5.7 `schema`
+   - 5.8 `resource`
 6. [Type System](#6-type-system)
 7. [Comment & Description Resolution](#7-comment--description-resolution)
 8. [Compiler Output Rules](#8-compiler-output-rules)
@@ -167,6 +168,7 @@ SessionStmt  ← COMMENT
              / UseStmt
              / CallBlock
              / ContextStmt
+             / ResourceStmt
              / PromptLines
              / SchemaBlock
 
@@ -177,6 +179,8 @@ ToolType     ← "mcp" | "apicp" | "collection" | "function" | "search"
 ToolField    ← "allowlist" "=" "[" STRING_LIT ("," STRING_LIT)* "]" NEWLINE
 
 ContextStmt  ← "context" (BOOL_LIT / STRING_LIT) NEWLINE
+
+ResourceStmt ← "resource" STRING_LIT ("->" (IDENTIFIER ":")? IDENTIFIER)? NEWLINE
 
 # ── prompt lines ──────────────────────────────────────────────────────────────
 
@@ -601,6 +605,27 @@ Full type compilation rules are in §6.
 
 ---
 
+### 5.8 `resource`
+
+The `resource` statement specifies an external file or data source to be associated with the session.
+
+```
+resource "data.csv"
+resource "prompt_template.txt" -> vars:template
+resource "config.json" -> myConfig
+```
+
+**Compilation rules:**
+
+- Each `resource` statement adds an entry to the session's `resources` array.
+- The `identifier` field is the first string argument.
+- The destination mapping follows the same rules as `call` blocks (see §8.5):
+    - `-> varName` → `in: vars`, `var: varName`
+    - `-> ns:varName` → `in: ns`, `var: varName`
+    - No `->` → No `in` or `var` fields are emitted (defaults to system-defined behavior).
+
+---
+
 ## 6. Type System
 
 The DSL type syntax unifies parameter types and schema field types. Both notations are
@@ -739,6 +764,7 @@ sessions:
     iterateOn: "..."
     vars: {...}
     tools: [...]
+    resources: [...]
     preCalls: [...]
     context: ...
     prePrompt: ...    # or array

@@ -310,6 +310,12 @@ func (c *Compiler) processUse(u *parser.UseStmt, sessNode *yaml.Node) error {
 		}
 	}
 
+	for _, field := range u.Fields {
+		if field.Allowlist != nil {
+			tool.Allowlist = append(tool.Allowlist, field.Allowlist...)
+		}
+	}
+
 	// If in a session, add to session tools
 	if sessNode != nil {
 		toolsNode, err := c.ensureNodeSeqField(sessNode, "tools")

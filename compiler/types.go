@@ -57,8 +57,9 @@ type ParameterYAML struct {
 }
 
 type ToolYAML struct {
-	Type string `yaml:"type"`
-	Name string `yaml:"name,omitempty"`
+	Type      string   `yaml:"type"`
+	Name      string   `yaml:"name,omitempty"`
+	Allowlist []string `yaml:"allowlist,omitempty"`
 }
 
 type TransformerYAML struct {

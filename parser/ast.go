@@ -149,10 +149,15 @@ type SessionStmt struct {
 }
 
 type UseStmt struct {
-	Search        bool    `("use" @("search")`
-	Type          *string `| "use" @("mcp" | "apicp" | "collection" | "function")`
-	Name          *string `@Ident)`
-	InlineComment *string `@InlineComment?`
+	Search        bool        `("use" @("search")`
+	Type          *string     `| "use" @("mcp" | "apicp" | "collection" | "function")`
+	Name          *string     `@Ident)`
+	Fields        []*UseField `("{" @@* "}")?`
+	InlineComment *string     `@InlineComment?`
+}
+
+type UseField struct {
+	Allowlist []string `"allowlist" "=" "[" @String ("," @String)* "]"`
 }
 
 type ContextStmt struct {

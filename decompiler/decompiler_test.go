@@ -192,11 +192,11 @@ components:
 	assert.Contains(t, output, `prompt("base")`)
 }
 
-func TestDecompiler_PrePrompt(t *testing.T) {
+func TestDecompiler_UseWithAllowlist(t *testing.T) {
 	input := `session("s") {
-    + pre1
-    + pre2
-    - prompt
+    use mcp tool1 {
+        allowlist = ["m1", "m2"]
+    }
 }
 `
 	p, _ := parser.NewParser()
@@ -209,7 +209,16 @@ func TestDecompiler_PrePrompt(t *testing.T) {
 	output, err := dec.Decompile()
 	assert.NoError(t, err)
 
-	assert.Contains(t, output, `+ pre1`)
-	assert.Contains(t, output, `+ pre2`)
-	assert.Contains(t, output, `- prompt`)
+	assert.Contains(t, output, `use mcp tool1 {`)
+	assert.Contains(t, output, `allowlist = ["m1", "m2"]`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
 }

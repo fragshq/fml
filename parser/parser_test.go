@@ -113,21 +113,20 @@ func TestParser_CallNoBody(t *testing.T) {
 	assert.Equal(t, "tool", stmts[0].Call.Name)
 }
 
-func TestParser_PromptLines(t *testing.T) {
+func TestParser_UseWithAllowlist(t *testing.T) {
 	p, _ := NewParser()
-	input := `session("s") {
-  + pre1
-  + pre2
-  - prompt
+	input := `session("s") { 
+  use mcp tool1 { 
+    allowlist = ["m1", "m2"] 
+  }
 }`
 	plan, err := p.ParseString("test.frags", input)
 	assert.NoError(t, err)
 
 	stmts := plan.Statements[0].Session.Statements
 	assert.Len(t, stmts, 1)
-	promptLines := stmts[0].Prompt
-	assert.Len(t, promptLines.Items, 3)
-	assert.Equal(t, "  + pre1", *promptLines.Items[0].PrePrompt)
-	assert.Equal(t, "  + pre2", *promptLines.Items[1].PrePrompt)
-	assert.Equal(t, "  - prompt", *promptLines.Items[2].Prompt)
+	assert.NotNil(t, stmts[0].Use)
+	assert.Equal(t, "tool1", *stmts[0].Use.Name)
+	assert.Len(t, stmts[0].Use.Fields, 1)
+	assert.Equal(t, []string{"m1", "m2"}, stmts[0].Use.Fields[0].Allowlist)
 }

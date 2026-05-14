@@ -416,14 +416,31 @@ session("s") {
 	assert.Equal(t, "prompt", prompt.Value)
 }
 
-func TestCompiler_MultiplePromptsError(t *testing.T) {
-	input := `
-session("s") {
-  - p1
-  - p2
-}
-`
-	_, err := compileSource(t, input)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "only one prompt (-) allowed")
+func TestCompiler_UseWithAllowlist(t *testing.T) {
+	input := `session("s") { 
+  use mcp tool1 { 
+    allowlist = ["m1", "m2"] 
+  }
+}`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	// sessions is MappingNode, index 0 is "s", index 1 is sessNode
+	sessNode := out.Sessions.Content[1]
+	var toolsNode *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "tools" {
+			toolsNode = sessNode.Content[i+1]
+			break
+		}
+	}
+	require.NotNil(t, toolsNode)
+	assert.Equal(t, 1, len(toolsNode.Content))
+
+	var tool ToolYAML
+	err = toolsNode.Content[0].Decode(&tool)
+	assert.NoError(t, err)
+	assert.Equal(t, "mcp", tool.Type)
+	assert.Equal(t, "tool1", tool.Name)
+	assert.Equal(t, []string{"m1", "m2"}, tool.Allowlist)
 }

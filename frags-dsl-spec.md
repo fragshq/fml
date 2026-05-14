@@ -170,9 +170,11 @@ SessionStmt  ← COMMENT
              / PromptLines
              / SchemaBlock
 
-UseStmt      ← "use" ToolType IDENTIFIER? NEWLINE
+UseStmt      ← "use" ToolType IDENTIFIER? (SP* "{" ToolField* "}")? NEWLINE
 
 ToolType     ← "mcp" | "apicp" | "collection" | "function" | "search"
+
+ToolField    ← "allowlist" "=" "[" STRING_LIT ("," STRING_LIT)* "]" NEWLINE
 
 ContextStmt  ← "context" (BOOL_LIT / STRING_LIT) NEWLINE
 
@@ -473,7 +475,9 @@ When the value is an `ExprValue` (`$(…)`), emit the expression string as-is (i
 Declares a tool available to the LLM in this session.
 
 ```
-use mcp salesforce
+use mcp salesforce {
+    allowlist = ["query", "search"]
+}
 use search
 use apicp my_api
 use collection http
@@ -483,10 +487,12 @@ use function custom_fn
 **Compilation rules:**
 
 - Each `use` statement adds an entry to the session's `tools` array.
+- If an options block is present, fields like `allowlist` are added to the tool entry.
 
 | DSL | Session `tools` entry |
 |-----|-----------------------|
 | `use mcp name` | `{type: mcp, name: name}` |
+| `use mcp name { allowlist=["a"] }` | `{type: mcp, name: name, allowlist: ["a"]}` |
 | `use apicp name` | `{type: apicp, name: name}` |
 | `use collection name` | `{type: collection, name: name}` |
 | `use function name` | `{type: function, name: name}` |

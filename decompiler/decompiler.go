@@ -266,7 +266,22 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 					continue
 				}
 				name := nameNode.Value
-				sb.WriteString(fmt.Sprintf("    use %s %s\n", typ, name))
+
+				alNode := d.getMapValue(tNode, "allowlist")
+				if alNode != nil && alNode.Kind == yaml.SequenceNode && len(alNode.Content) > 0 {
+					sb.WriteString(fmt.Sprintf("    use %s %s {\n", typ, name))
+					sb.WriteString("        allowlist = [")
+					for j, item := range alNode.Content {
+						if j > 0 {
+							sb.WriteString(", ")
+						}
+						sb.WriteString(fmt.Sprintf("%q", item.Value))
+					}
+					sb.WriteString("]\n")
+					sb.WriteString("    }\n")
+				} else {
+					sb.WriteString(fmt.Sprintf("    use %s %s\n", typ, name))
+				}
 			}
 		}
 	}
@@ -350,6 +365,11 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 				}
 				sb.WriteString("    }\n")
 			} else {
+				// Avoid writing 'schema any' for default empty session schemas
+				if s.Type == parser.TypeObject && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
+					continue
+				}
+
 				ft, err := d.formatType(s)
 				if err != nil {
 					return err

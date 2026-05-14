@@ -93,6 +93,7 @@ var semanticKeywords = map[string]int{
 	"require": 0, "use": 0, "mcp": 0, "apicp": 0, "collection": 0, "function": 0, "search": 0,
 	"context": 0, "set": 0, "schema": 0, "components": 0, "prompt": 0, "code": 0,
 	"after": 0, "expect": 0, "iterate": 0, "target": 0, "type": 0, "default": 0, "title": 0,
+	"allowlist":        0,
 	"onFunctionOutput": 0, "onFunctionInput": 0, "onResource": 0, "jmesPath": 0, "parser": 0,
 	"true": 0, "false": 0,
 	"string": 4, "int": 4, "float": 4, "bool": 4, "any": 4,

@@ -7,7 +7,7 @@ FML is a compact, human-readable Domain Specific Language designed for defining 
 - **Concise Syntax**: A clean, indentation-sensitive language for LLM pipeline definition.
 - **Session-Based Pipelines**: Organize your LLM tasks into logical, dependent sessions.
 - **Automatic Schema Assembly**: Generates JSON Schema automatically from session definitions.
-- **Tool & MCP Support**: Easily declare tool requirements (MCP, API CP, functions).
+- **Tool & MCP Support**: Easily declare tool requirements (MCP, API CP, functions) with optional method allowlisting.
 - **Metadata Preservation**: Comments are preserved and mapped to JSON Schema descriptions.
 - **Bi-directional**: Includes a compiler (FML -> YAML) and a decompiler (YAML -> FML).
 - **IDE Support**: Language Server Protocol (LSP) implementation for real-time diagnostics and highlighting.

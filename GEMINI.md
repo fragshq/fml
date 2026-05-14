@@ -41,7 +41,7 @@ The compiler implements a unique grouping strategy for the output JSON Schema:
     - `transformer("name") { ... }`: Defines reusable output transformers.
     - `call("tool") [-> [ns:]var] [{ ... }]`: Tool invocations with optional namespaced argument mapping and optional body.
     - `session("name", after="prev", expect=...) { ... }`: Sequential pipeline steps.
-    - `use mcp|apicp|search ...`: Declares tool requirements.
+    - `use mcp|apicp|search ... [{ allowlist=["..."] }]`: Declares tool requirements with optional method restriction.
     - Enums (`"a"|"b"`) and optional fields (`field?: type`) are natively supported.
 
 ### Testing Standard

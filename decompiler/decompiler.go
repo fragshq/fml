@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/theirish/fml/compiler"
-	"github.com/theirish/fml/parser"
+	"github.com/theirish81/fml/compiler"
+	"github.com/theirish81/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

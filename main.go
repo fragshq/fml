@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/theirish/fml/compiler"
-	"github.com/theirish/fml/decompiler"
-	"github.com/theirish/fml/parser"
+	"github.com/theirish81/fml/compiler"
+	"github.com/theirish81/fml/decompiler"
+	"github.com/theirish81/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

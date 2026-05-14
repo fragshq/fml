@@ -16,7 +16,7 @@ FML is a compact, human-readable Domain Specific Language designed for defining 
 
 ```bash
 # Clone the repository
-git clone https://github.com/theirish/fml.git
+git clone https://github.com/theirish81/fml.git
 cd fml
 
 # Build the compiler

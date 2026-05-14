@@ -43,15 +43,9 @@ func (d *Decompiler) Decompile() (string, error) {
 	if d.plan.Vars != nil && len(d.plan.Vars.Content) > 0 {
 		d.writeBlockComment(&sb, d.plan.Comments["vars"], "")
 		for i := 0; i+1 < len(d.plan.Vars.Content); i += 2 {
-			keyNode := d.plan.Vars.Content[i]
-			key := keyNode.Value
-			valNode := d.plan.Vars.Content[i+1]
-			d.writeBlockComment(&sb, keyNode.HeadComment, "")
-			sb.WriteString(fmt.Sprintf("set %s = %s", key, d.formatValue(valNode)))
-			if keyNode.LineComment != "" {
-				sb.WriteString(fmt.Sprintf(" # %s", strings.TrimSpace(strings.TrimPrefix(keyNode.LineComment, "#"))))
+			if err := d.writeVar(&sb, d.plan.Vars.Content[i], d.plan.Vars.Content[i+1], ""); err != nil {
+				return "", err
 			}
-			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
 	}
@@ -330,13 +324,9 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 	if vars != nil {
 		d.writeBlockComment(sb, varsKey.HeadComment, "    ")
 		for i := 0; i+1 < len(vars.Content); i += 2 {
-			vKey := vars.Content[i]
-			d.writeBlockComment(sb, vKey.HeadComment, "    ")
-			sb.WriteString(fmt.Sprintf("    set %s = %s", vKey.Value, d.formatValue(vars.Content[i+1])))
-			if vKey.LineComment != "" {
-				sb.WriteString(fmt.Sprintf(" # %s", strings.TrimSpace(strings.TrimPrefix(vKey.LineComment, "#"))))
+			if err := d.writeVar(sb, vars.Content[i], vars.Content[i+1], "    "); err != nil {
+				return err
 			}
-			sb.WriteString("\n")
 		}
 	}
 
@@ -490,6 +480,16 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 	}
 
 	sb.WriteString("}\n")
+	return nil
+}
+
+func (d *Decompiler) writeVar(sb *strings.Builder, keyNode *yaml.Node, valNode *yaml.Node, indent string) error {
+	d.writeBlockComment(sb, keyNode.HeadComment, indent)
+	sb.WriteString(fmt.Sprintf("%sset %s = %s", indent, keyNode.Value, d.formatValue(valNode)))
+	if keyNode.LineComment != "" {
+		sb.WriteString(fmt.Sprintf(" # %s", strings.TrimSpace(strings.TrimPrefix(keyNode.LineComment, "#"))))
+	}
+	sb.WriteString("\n")
 	return nil
 }
 
@@ -709,27 +709,25 @@ func (d *Decompiler) formatValue(n *yaml.Node) string {
 }
 
 func (d *Decompiler) getMapValue(node *yaml.Node, key string) *yaml.Node {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			return node.Content[i+1]
-		}
-	}
-	return nil
+	_, v := d.getMapEntry(node, key)
+	return v
 }
 
 func (d *Decompiler) getMapKey(node *yaml.Node, key string) *yaml.Node {
+	k, _ := d.getMapEntry(node, key)
+	return k
+}
+
+func (d *Decompiler) getMapEntry(node *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
 	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
+		return nil, nil
 	}
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		if node.Content[i].Value == key {
-			return node.Content[i]
+			return node.Content[i], node.Content[i+1]
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func (d *Decompiler) writeBlockComment(sb *strings.Builder, comment string, indent string) {

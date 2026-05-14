@@ -1,0 +1,59 @@
+system("You are a precise research assistant.")
+
+parameter("topic", type=string)
+# Maximum number of results to return
+parameter("max_results", type=int, default=5)
+
+set defaultRegion = "eu-west"
+
+# This is the transformer we love
+transformer("slimResults") {
+    onFunctionOutput = "searchDocuments"
+    jmesPath    = "[*].{id: id, title: title, snippet: snippet}"
+}
+
+# everything is great
+session("gather") {
+    use search
+    use mcp knowledge_base
+    call("searchDocuments") -> rawDocs {
+        query   = "{{ .params.topic }}"
+        limit   = { 
+            foo: "bar"
+        }
+        code(
+            args.query.split(' ').join('+')
+        )
+    }
+
+    - Search for information about {{ .params.topic }}.
+      Focus on the most recent and relevant sources.
+      Use both the web and the knowledge base.
+    - Using the search results above, extract the overview and key points
+      required by the schema.
+    
+    schema {
+        overview: {
+            summary:   string
+            keyPoints: string[]
+            sources:   $SourceRef[]
+        }
+    }
+}
+
+session("elaborate", after="gather", expect=context.overview.keyPoints != null, iterate=context.overview.keyPoints) {
+    context "Overview: {{ .context.overview }}"
+
+    - Expand each key point into a detailed explanation.
+      Be concise but thorough. Limit to {{ .params.max_results }} points.
+
+    schema string[]
+}
+
+components {
+    schema("SourceRef") {
+        id:    string # the id of the source
+        title: string
+        url?:  string
+    }
+}

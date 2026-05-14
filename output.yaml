@@ -1,0 +1,103 @@
+systemPrompt: You are a precise research assistant.
+parameters:
+    - name: topic
+      schema:
+        type: string
+    - name: max_results
+      schema:
+        type: integer
+        description: Maximum number of results to return
+      default: 5
+vars:
+    defaultRegion: eu-west
+requiredTools:
+    - type: mcp
+      name: knowledge_base
+transformers:
+    # This is the transformer we love
+    - name: slimResults
+      onFunctionOutput: searchDocuments
+      jmesPath: '[*].{id: id, title: title, snippet: snippet}'
+sessions:
+    # everything is great
+    gather:
+        tools:
+            - type: internet_search
+            - type: mcp
+              name: knowledge_base
+        preCalls:
+            - name: searchDocuments
+              args:
+                limit:
+                    foo: bar
+                query: '{{ .params.topic }}'
+              code: |-
+                (args.query.split(' ').join('+'))
+                            whatever
+              in: vars
+              var: rawDocs
+        prePrompt: |-
+            Search for information about {{ .params.topic }}.
+             Focus on the most recent and relevant sources.
+             Use both the web and the knowledge base.
+        prompt: |-
+            Using the search results above, extract the overview and key points
+             required by the schema.
+    elaborate:
+        dependsOn:
+            - session: gather
+              expression: context.overview.keyPoints != null
+        iterateOn: context.overview.keyPoints
+        context: 'Overview: {{ .context.overview }}'
+        prompt: |-
+            Expand each key point into a detailed explanation.
+             Be concise but thorough. Limit to {{ .params.max_results }} points.
+schema:
+    type: object
+    properties:
+        elaborate:
+            type: array
+            items:
+                type: string
+            x-session: elaborate
+        gather:
+            type: object
+            properties:
+                overview:
+                    type: object
+                    properties:
+                        keyPoints:
+                            type: array
+                            items:
+                                type: string
+                        sources:
+                            type: array
+                            items:
+                                $ref: '#/components/schemas/SourceRef'
+                        summary:
+                            type: string
+                    required:
+                        - summary
+                        - keyPoints
+                        - sources
+            required:
+                - overview
+            x-session: gather
+    required:
+        - gather
+        - elaborate
+components:
+    schemas:
+        SourceRef:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: the id of the source
+                title:
+                    type: string
+                url:
+                    type: string
+            required:
+                - id
+                - title

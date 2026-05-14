@@ -1,0 +1,411 @@
+package parser
+
+import (
+	"fmt"
+	"io"
+	"strings"
+	"unicode"
+
+	"github.com/alecthomas/participle/v2/lexer"
+)
+
+// FRAGSLexerDefinition implements lexer.Definition for the Frags DSL.
+type FRAGSLexerDefinition struct{}
+
+func (d *FRAGSLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, error) {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return &fragsLexer{
+		s:   string(b),
+		pos: lexer.Position{Filename: filename, Line: 1, Column: 1},
+	}, nil
+}
+
+func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
+	return map[string]lexer.TokenType{
+		SymComment:       TokenComment,
+		SymInlineComment: TokenInlineComment,
+		SymString:        TokenString,
+		SymNumber:        TokenNumber,
+		SymBool:          TokenBool,
+		SymIdent:         TokenIdent,
+		SymPunct:         TokenPunct,
+		SymWhitespace:    TokenWhitespace,
+		SymPromptItem:    TokenPromptItem,
+		SymPrePromptItem: TokenPrePromptItem,
+		SymAttrValue:     TokenAttrValue,
+		SymCodeValue:     TokenCodeValue,
+		SymEOF:           TokenEOF,
+	}
+}
+
+// fragsLexer is a stateful lexer that handles indentation-sensitive prompt blocks,
+// balanced-parentheses code segments, and robust error detection.
+type fragsLexer struct {
+	s                  string
+	pos                lexer.Position
+	expectingAttrValue bool
+	expectingCode      bool
+	lastIdent          string
+}
+
+func (l *fragsLexer) Next() (lexer.Token, error) {
+	for {
+		if l.pos.Column == 1 {
+			i := 0
+			for l.isSpace(i) {
+				i++
+			}
+			isPrompt := l.isAtMarker('-', i)
+			isPrePrompt := l.isAtMarker('+', i)
+
+			if isPrompt || isPrePrompt {
+				t, err := l.consumePromptItem(i, isPrePrompt)
+				return t, err
+			}
+
+			if l.isAt(i, '#') {
+				l.s = l.s[i:]
+				l.pos.Column += i
+				return l.consumeComment(SymComment), nil
+			}
+		}
+
+		i := 0
+		for l.isSpace(i) {
+			i++
+		}
+		if i > 0 {
+			l.s = l.s[i:]
+			l.pos.Column += i
+		}
+
+		if len(l.s) == 0 {
+			return lexer.EOFToken(l.pos), nil
+		}
+
+		if l.isNewline(0) {
+			l.consumeNewline()
+			l.lastIdent = ""
+			continue
+		}
+		break
+	}
+
+	if l.expectingAttrValue {
+		l.expectingAttrValue = false
+		if !l.isAt(0, '"') {
+			i := 0
+			for i < len(l.s) && l.s[i] != ',' && l.s[i] != ')' && !l.isNewline(i) {
+				i++
+			}
+			val := strings.TrimSpace(l.s[:i])
+			t := l.consume(i, SymAttrValue)
+			t.Value = val
+			return t, nil
+		}
+	}
+
+	if l.expectingCode {
+		l.expectingCode = false
+		t, err := l.consumeBalanced('(', ')')
+		if err != nil {
+			return t, err
+		}
+		t.Type = TokenCodeValue
+		return t, nil
+	}
+
+	var t lexer.Token
+	var err error
+	{
+		r := l.s[0]
+		switch {
+		case r == '#':
+			t = l.consumeComment(SymInlineComment)
+		case r == '"':
+			t, err = l.consumeString()
+			l.lastIdent = ""
+		case unicode.IsDigit(rune(r)) || r == '-' || r == '+':
+			if r == '-' {
+				if strings.HasPrefix(l.s, "->") {
+					t = l.consume(2, SymPunct)
+				} else if len(l.s) > 1 && unicode.IsDigit(rune(l.s[1])) {
+					t, err = l.consumeNumber()
+				} else {
+					t = l.consume(1, SymPunct)
+				}
+			} else {
+				t, err = l.consumeNumber()
+			}
+			l.lastIdent = ""
+		case unicode.IsLetter(rune(r)) || r == '_':
+			t = l.consumeIdent()
+			l.lastIdent = t.Value
+		case strings.ContainsRune("][{}():,=|?$-", rune(r)):
+			if strings.HasPrefix(l.s, "->") {
+				t = l.consume(2, SymPunct)
+				l.lastIdent = ""
+			} else if strings.HasPrefix(l.s, "$(") {
+				t = l.consume(2, SymPunct)
+				l.expectingCode = true
+				l.lastIdent = ""
+			} else {
+				t = l.consume(1, SymPunct)
+				if t.Value == "=" {
+					if l.isSessionAttribute(l.lastIdent) {
+						l.expectingAttrValue = true
+					}
+				} else if t.Value == "(" {
+					if l.lastIdent == "code" {
+						l.expectingCode = true
+					}
+				}
+				if t.Value != "," {
+					l.lastIdent = ""
+				}
+			}
+		default:
+			return lexer.Token{}, fmt.Errorf("%s: illegal character %q", l.pos, r)
+		}
+	}
+
+	return t, err
+}
+
+func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
+	depth := 1
+	i := 0
+	startPos := l.pos
+
+	for i < len(l.s) {
+		r := rune(l.s[i])
+		if r == start {
+			depth++
+		} else if r == end {
+			depth--
+			if depth == 0 {
+				break
+			}
+		}
+		i++
+	}
+
+	if depth > 0 {
+		return lexer.Token{}, fmt.Errorf("%s: unclosed balanced block (missing %q)", startPos, end)
+	}
+
+	val := l.s[:i]
+	l.s = l.s[i:]
+	for _, r := range val {
+		if r == '\n' {
+			l.pos.Line++
+			l.pos.Column = 1
+		} else {
+			l.pos.Column++
+		}
+	}
+
+	return lexer.Token{
+		Type:  TokenPunct,
+		Value: val,
+		Pos:   startPos,
+	}, nil
+}
+
+func (l *fragsLexer) consumeNewline() {
+	if strings.HasPrefix(l.s, "\r\n") {
+		l.s = l.s[2:]
+	} else {
+		l.s = l.s[1:]
+	}
+	l.pos.Line++
+	l.pos.Column = 1
+}
+
+func (l *fragsLexer) consume(n int, typ string) lexer.Token {
+	val := l.s[:n]
+	token := lexer.Token{
+		Type:  l.typeToToken(typ),
+		Value: val,
+		Pos:   l.pos,
+	}
+	l.s = l.s[n:]
+	l.pos.Column += n
+	return token
+}
+
+func (l *fragsLexer) typeToToken(typ string) lexer.TokenType {
+	switch typ {
+	case SymComment:
+		return TokenComment
+	case SymInlineComment:
+		return TokenInlineComment
+	case SymString:
+		return TokenString
+	case SymNumber:
+		return TokenNumber
+	case SymBool:
+		return TokenBool
+	case SymIdent:
+		return TokenIdent
+	case SymPunct:
+		return TokenPunct
+	case SymWhitespace:
+		return TokenWhitespace
+	case SymPromptItem:
+		return TokenPromptItem
+	case SymPrePromptItem:
+		return TokenPrePromptItem
+	case SymAttrValue:
+		return TokenAttrValue
+	case SymCodeValue:
+		return TokenCodeValue
+	}
+	return TokenEOF
+}
+
+func (l *fragsLexer) consumeComment(typ string) lexer.Token {
+	i := 0
+	for i < len(l.s) && !l.isNewline(i) {
+		i++
+	}
+	return l.consume(i, typ)
+}
+
+func (l *fragsLexer) consumeString() (lexer.Token, error) {
+	startPos := l.pos
+	i := 1
+	for i < len(l.s) {
+		if l.isNewline(i) {
+			return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+		}
+		if l.isAt(i, '\\') {
+			if i+1 >= len(l.s) {
+				return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+			}
+			esc := l.s[i+1]
+			if esc != '"' && esc != '\\' && esc != 'n' && esc != 'r' && esc != 't' {
+				return lexer.Token{}, fmt.Errorf("%s: invalid escape sequence \\%c", l.pos, esc)
+			}
+			i += 2
+			continue
+		}
+		if l.isAt(i, '"') {
+			val := l.s[:i+1]
+			// Validate template tags {{ }} are balanced
+			if strings.Count(val, "{{") != strings.Count(val, "}}") {
+				return lexer.Token{}, fmt.Errorf("%s: malformed template tags in string", startPos)
+			}
+			i++
+			return l.consume(i, SymString), nil
+		}
+		i++
+	}
+	return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+}
+
+func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
+	startPos := l.pos
+	i := 0
+	if l.isAt(i, '-') || l.isAt(i, '+') {
+		i++
+	}
+	dots := 0
+	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.isAt(i, '.')) {
+		if l.isAt(i, '.') {
+			dots++
+			if dots > 1 {
+				return lexer.Token{}, fmt.Errorf("%s: malformed number (multiple decimal points)", startPos)
+			}
+		}
+		i++
+	}
+	if l.isAt(i-1, '.') {
+		return lexer.Token{}, fmt.Errorf("%s: malformed number (trailing decimal point)", startPos)
+	}
+	return l.consume(i, SymNumber), nil
+}
+
+func (l *fragsLexer) consumeIdent() lexer.Token {
+	i := 0
+	for l.isIdentChar(i) {
+		i++
+	}
+	val := l.s[:i]
+	if l.isBool(val) {
+		return l.consume(i, SymBool)
+	}
+	return l.consume(i, SymIdent)
+}
+
+func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Token, error) {
+	startPos := l.pos
+	dashCol := indent + 1
+	i := 0
+	for i < len(l.s) && !l.isNewline(i) {
+		i++
+	}
+
+	totalLen := i
+	for {
+		nextStart := totalLen
+		if nextStart >= len(l.s) {
+			break
+		}
+		j := nextStart
+		if strings.HasPrefix(l.s[j:], "\r\n") {
+			j += 2
+		} else if l.isNewline(j) {
+			j++
+		} else {
+			break
+		}
+
+		k := 0
+		for l.isSpace(j + k) {
+			k++
+		}
+
+		if j+k < len(l.s) && !l.isNewline(j+k) && k > dashCol {
+			j += k
+			for j < len(l.s) && !l.isNewline(j) {
+				j++
+			}
+			totalLen = j
+			continue
+		}
+		break
+	}
+
+	val := l.s[:totalLen]
+	// Validate template tags
+	if strings.Count(val, "{{") != strings.Count(val, "}}") {
+		return lexer.Token{}, fmt.Errorf("%s: malformed template tags in prompt item", startPos)
+	}
+
+	typ := TokenPromptItem
+	if isPrePrompt {
+		typ = TokenPrePromptItem
+	}
+
+	token := lexer.Token{
+		Type:  typ,
+		Value: val,
+		Pos:   startPos,
+	}
+
+	l.s = l.s[totalLen:]
+	for _, r := range val {
+		if r == '\n' {
+			l.pos.Line++
+			l.pos.Column = 1
+		} else {
+			l.pos.Column++
+		}
+	}
+
+	return token, nil
+}

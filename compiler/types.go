@@ -13,15 +13,25 @@ type PlanYAML struct {
 	Sessions      *yaml.Node      `yaml:"sessions,omitempty"`     // MappingNode
 	Schema        *yaml.Node      `yaml:"schema,omitempty"`
 	Components    *ComponentsYAML `yaml:"components,omitempty"`
+
+	// Comments captures HeadComments for top-level keys
+	Comments map[string]string `yaml:"-"`
 }
 
 func (p *PlanYAML) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.MappingNode {
 		return nil
 	}
+	p.Comments = make(map[string]string)
 	for i := 0; i+1 < len(value.Content); i += 2 {
-		key := value.Content[i].Value
+		keyNode := value.Content[i]
+		key := keyNode.Value
 		val := value.Content[i+1]
+
+		if keyNode.HeadComment != "" {
+			p.Comments[key] = keyNode.HeadComment
+		}
+
 		switch key {
 		case "systemPrompt":
 			p.SystemPrompt = val

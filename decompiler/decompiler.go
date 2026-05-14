@@ -26,10 +26,12 @@ func (d *Decompiler) Decompile() (string, error) {
 	var sb strings.Builder
 
 	if d.plan.SystemPrompt != nil {
+		d.writeBlockComment(&sb, d.plan.Comments["systemPrompt"], "")
 		sb.WriteString(fmt.Sprintf("system(%q)\n\n", d.plan.SystemPrompt.Value))
 	}
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["parameters"], "")
 		for _, pNode := range d.plan.Parameters.Content {
 			if err := d.writeParameter(&sb, pNode); err != nil {
 				return "", err
@@ -39,15 +41,23 @@ func (d *Decompiler) Decompile() (string, error) {
 	}
 
 	if d.plan.Vars != nil && len(d.plan.Vars.Content) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["vars"], "")
 		for i := 0; i+1 < len(d.plan.Vars.Content); i += 2 {
-			key := d.plan.Vars.Content[i].Value
+			keyNode := d.plan.Vars.Content[i]
+			key := keyNode.Value
 			valNode := d.plan.Vars.Content[i+1]
-			sb.WriteString(fmt.Sprintf("set %s = %s\n", key, d.formatValue(valNode)))
+			d.writeBlockComment(&sb, keyNode.HeadComment, "")
+			sb.WriteString(fmt.Sprintf("set %s = %s", key, d.formatValue(valNode)))
+			if keyNode.LineComment != "" {
+				sb.WriteString(fmt.Sprintf(" # %s", strings.TrimSpace(strings.TrimPrefix(keyNode.LineComment, "#"))))
+			}
+			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
 	}
 
 	if d.plan.RequiredTools != nil && len(d.plan.RequiredTools) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["requiredTools"], "")
 		for _, tool := range d.plan.RequiredTools {
 			if tool.Type == "internet_search" {
 				sb.WriteString("require search\n")
@@ -59,6 +69,7 @@ func (d *Decompiler) Decompile() (string, error) {
 	}
 
 	if d.plan.Transformers != nil && len(d.plan.Transformers.Content) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["transformers"], "")
 		for _, tNode := range d.plan.Transformers.Content {
 			if err := d.writeTransformer(&sb, tNode); err != nil {
 				return "", err
@@ -67,7 +78,18 @@ func (d *Decompiler) Decompile() (string, error) {
 		sb.WriteString("\n")
 	}
 
+	if d.plan.PreCalls != nil && len(d.plan.PreCalls.Content) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["preCalls"], "")
+		for _, cNode := range d.plan.PreCalls.Content {
+			if err := d.writeCall(&sb, cNode, ""); err != nil {
+				return "", err
+			}
+		}
+		sb.WriteString("\n")
+	}
+
 	if d.plan.Components != nil {
+		d.writeBlockComment(&sb, d.plan.Comments["components"], "")
 		sb.WriteString("components {\n")
 		if len(d.plan.Components.Schemas) > 0 {
 			for name, schema := range d.plan.Components.Schemas {
@@ -75,14 +97,22 @@ func (d *Decompiler) Decompile() (string, error) {
 				if err := d.writeSchemaFields(&sb, schema, "        "); err != nil {
 					return "", err
 				}
-				sb.WriteString("    }\n")
+				sb.WriteString("    }")
+				if schema.Description != "" {
+					sb.WriteString(fmt.Sprintf(" # %s", schema.Description))
+				}
+				sb.WriteString("\n")
 			}
 		}
 		if len(d.plan.Components.Prompts) > 0 {
 			for name, prompt := range d.plan.Components.Prompts {
 				sb.WriteString(fmt.Sprintf("    prompt(%q) {\n", name))
 				sb.WriteString(fmt.Sprintf("        %q\n", prompt.Value))
-				sb.WriteString("    }\n")
+				sb.WriteString("    }")
+				if prompt.LineComment != "" {
+					sb.WriteString(fmt.Sprintf(" # %s", prompt.LineComment))
+				}
+				sb.WriteString("\n")
 			}
 		}
 		sb.WriteString("}\n\n")
@@ -90,6 +120,7 @@ func (d *Decompiler) Decompile() (string, error) {
 
 	// Session processing
 	if d.plan.Sessions != nil && len(d.plan.Sessions.Content) > 0 {
+		d.writeBlockComment(&sb, d.plan.Comments["sessions"], "")
 		sessionSchemas := make(map[string]map[string]*compiler.JSONSchema)
 		requiredProps := make(map[string]bool)
 		if d.plan.Schema != nil {
@@ -111,24 +142,25 @@ func (d *Decompiler) Decompile() (string, error) {
 		}
 
 		for i := 0; i+1 < len(d.plan.Sessions.Content); i += 2 {
-			name := d.plan.Sessions.Content[i].Value
+			keyNode := d.plan.Sessions.Content[i]
+			name := keyNode.Value
 			sessNode := d.plan.Sessions.Content[i+1]
-			if err := d.writeSession(&sb, name, sessNode, sessionSchemas[name], requiredProps); err != nil {
+			if err := d.writeSession(&sb, keyNode, sessNode, sessionSchemas[name], requiredProps); err != nil {
 				return "", err
 			}
 			sb.WriteString("\n")
 		}
 	}
 
+	if d.plan.Schema != nil {
+		d.writeBlockComment(&sb, d.plan.Comments["schema"], "")
+	}
+
 	return strings.TrimSpace(sb.String()) + "\n", nil
 }
 
 func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error {
-	if node.HeadComment != "" {
-		for _, line := range strings.Split(node.HeadComment, "\n") {
-			sb.WriteString(fmt.Sprintf("# %s\n", line))
-		}
-	}
+	d.writeBlockComment(sb, node.HeadComment, "")
 
 	nameNode := d.getMapValue(node, "name")
 	if nameNode == nil {
@@ -146,7 +178,7 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 		return fmt.Errorf("failed to decode schema for parameter %q: %w", name, err)
 	}
 
-	typ, err := d.formatType(&schema)
+	typ, err := d.formatType(&schema, "")
 	if err != nil {
 		return err
 	}
@@ -166,22 +198,67 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 
 	sb.WriteString(")")
 
+	// 1. Check for YAML inline comment on the parameter node
+	comment := ""
 	if node.LineComment != "" {
-		sb.WriteString(fmt.Sprintf(" # %s", node.LineComment))
-	} else if schema.Description != "" {
-		sb.WriteString(fmt.Sprintf(" # %s", schema.Description))
+		comment = strings.TrimSpace(strings.TrimPrefix(node.LineComment, "#"))
+	}
+	// 2. Check for YAML inline comment on the 'name' key or value
+	if comment == "" {
+		for i := 0; i < len(node.Content); i += 2 {
+			if node.Content[i].Value == "name" {
+				if node.Content[i].LineComment != "" {
+					comment = strings.TrimSpace(strings.TrimPrefix(node.Content[i].LineComment, "#"))
+				} else if node.Content[i+1].LineComment != "" {
+					comment = strings.TrimSpace(strings.TrimPrefix(node.Content[i+1].LineComment, "#"))
+				}
+				break
+			}
+		}
+	}
+	// 3. Check for YAML inline comment on the 'schema' key or value
+	if comment == "" {
+		for i := 0; i < len(node.Content); i += 2 {
+			if node.Content[i].Value == "schema" {
+				if node.Content[i].LineComment != "" {
+					comment = strings.TrimSpace(strings.TrimPrefix(node.Content[i].LineComment, "#"))
+				} else if node.Content[i+1].LineComment != "" {
+					comment = strings.TrimSpace(strings.TrimPrefix(node.Content[i+1].LineComment, "#"))
+				}
+				break
+			}
+		}
+	}
+	// 4. Check for 'description' at the parameter level (sibling of 'name')
+	if comment == "" {
+		if dNode := d.getMapValue(node, "description"); dNode != nil {
+			comment = dNode.Value
+		}
+	}
+	// 5. Check for 'description' inside the schema
+	if comment == "" && schema.Description != "" {
+		comment = schema.Description
+	}
+
+	if comment != "" {
+		sb.WriteString(fmt.Sprintf(" # %s", comment))
 	}
 	sb.WriteString("\n")
 	return nil
 }
 
 func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) error {
+	d.writeBlockComment(sb, node.HeadComment, "")
 	nameNode := d.getMapValue(node, "name")
 	if nameNode == nil {
 		return fmt.Errorf("transformer node missing 'name'")
 	}
 	name := nameNode.Value
-	sb.WriteString(fmt.Sprintf("transformer(%q) {\n", name))
+	sb.WriteString(fmt.Sprintf("transformer(%q) {", name))
+	if node.LineComment != "" {
+		sb.WriteString(fmt.Sprintf(" # %s", node.LineComment))
+	}
+	sb.WriteString("\n")
 
 	if v := d.getMapValue(node, "onFunctionOutput"); v != nil {
 		sb.WriteString(fmt.Sprintf("    onFunctionOutput = %q\n", v.Value))
@@ -210,7 +287,9 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) erro
 	return nil
 }
 
-func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) error {
+func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) error {
+	d.writeBlockComment(sb, keyNode.HeadComment, "")
+	name := keyNode.Value
 	sb.WriteString(fmt.Sprintf("session(%q", name))
 
 	if len(schemas) == 1 {
@@ -239,19 +318,33 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	if it != nil {
 		sb.WriteString(fmt.Sprintf(", iterate=%s", it.Value))
 	}
-	sb.WriteString(") {\n")
+	sb.WriteString(") {")
+	if keyNode.LineComment != "" {
+		sb.WriteString(fmt.Sprintf(" # %s", keyNode.LineComment))
+	}
+	sb.WriteString("\n")
 
 	// Vars
+	varsKey := d.getMapKey(sessNode, "vars")
 	vars := d.getMapValue(sessNode, "vars")
 	if vars != nil {
+		d.writeBlockComment(sb, varsKey.HeadComment, "    ")
 		for i := 0; i+1 < len(vars.Content); i += 2 {
-			sb.WriteString(fmt.Sprintf("    set %s = %s\n", vars.Content[i].Value, d.formatValue(vars.Content[i+1])))
+			vKey := vars.Content[i]
+			d.writeBlockComment(sb, vKey.HeadComment, "    ")
+			sb.WriteString(fmt.Sprintf("    set %s = %s", vKey.Value, d.formatValue(vars.Content[i+1])))
+			if vKey.LineComment != "" {
+				sb.WriteString(fmt.Sprintf(" # %s", strings.TrimSpace(strings.TrimPrefix(vKey.LineComment, "#"))))
+			}
+			sb.WriteString("\n")
 		}
 	}
 
 	// Tools
+	toolsKey := d.getMapKey(sessNode, "tools")
 	tools := d.getMapValue(sessNode, "tools")
 	if tools != nil {
+		d.writeBlockComment(sb, toolsKey.HeadComment, "    ")
 		for _, tNode := range tools.Content {
 			typNode := d.getMapValue(tNode, "type")
 			if typNode == nil {
@@ -259,6 +352,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 			}
 			typ := typNode.Value
 			if typ == "internet_search" {
+				d.writeBlockComment(sb, tNode.HeadComment, "    ")
 				sb.WriteString("    use search\n")
 			} else {
 				nameNode := d.getMapValue(tNode, "name")
@@ -268,6 +362,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 				name := nameNode.Value
 
 				alNode := d.getMapValue(tNode, "allowlist")
+				d.writeBlockComment(sb, tNode.HeadComment, "    ")
 				if alNode != nil && alNode.Kind == yaml.SequenceNode && len(alNode.Content) > 0 {
 					sb.WriteString(fmt.Sprintf("    use %s %s {\n", typ, name))
 					sb.WriteString("        allowlist = [")
@@ -287,13 +382,16 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	}
 
 	// Resources
+	resourcesKey := d.getMapKey(sessNode, "resources")
 	resources := d.getMapValue(sessNode, "resources")
 	if resources != nil {
+		d.writeBlockComment(sb, resourcesKey.HeadComment, "    ")
 		for _, rNode := range resources.Content {
 			idNode := d.getMapValue(rNode, "identifier")
 			if idNode == nil {
 				continue
 			}
+			d.writeBlockComment(sb, rNode.HeadComment, "    ")
 			sb.WriteString(fmt.Sprintf("    resource %q", idNode.Value))
 
 			in := d.getMapValue(rNode, "in")
@@ -310,51 +408,30 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 	}
 
 	// Calls
+	callsKey := d.getMapKey(sessNode, "preCalls")
 	calls := d.getMapValue(sessNode, "preCalls")
 	if calls != nil {
+		d.writeBlockComment(sb, callsKey.HeadComment, "    ")
 		for _, cNode := range calls.Content {
-			cNameNode := d.getMapValue(cNode, "name")
-			if cNameNode == nil {
-				continue
+			if err := d.writeCall(sb, cNode, "    "); err != nil {
+				return err
 			}
-			cName := cNameNode.Value
-			sb.WriteString(fmt.Sprintf("    call(%q)", cName))
-
-			in := d.getMapValue(cNode, "in")
-			target := d.getMapValue(cNode, "var")
-			if target != nil {
-				if in != nil && in.Value != "vars" && in.Value != "ai" {
-					sb.WriteString(fmt.Sprintf(" -> %s:%s", in.Value, target.Value))
-				} else {
-					sb.WriteString(fmt.Sprintf(" -> %s", target.Value))
-				}
-			}
-			sb.WriteString(" {\n")
-
-			args := d.getMapValue(cNode, "args")
-			if args != nil {
-				for i := 0; i+1 < len(args.Content); i += 2 {
-					sb.WriteString(fmt.Sprintf("        %s = %s\n", args.Content[i].Value, d.formatValue(args.Content[i+1])))
-				}
-			}
-
-			code := d.getMapValue(cNode, "code")
-			if code != nil {
-				sb.WriteString(fmt.Sprintf("        code( %s )\n", code.Value))
-			}
-			sb.WriteString("    }\n")
 		}
 	}
 
 	// Context
+	ctxKey := d.getMapKey(sessNode, "context")
 	ctx := d.getMapValue(sessNode, "context")
 	if ctx != nil {
+		d.writeBlockComment(sb, ctxKey.HeadComment, "    ")
 		sb.WriteString(fmt.Sprintf("    context %s\n", d.formatValue(ctx)))
 	}
 
 	// Prompts
+	prePromptKey := d.getMapKey(sessNode, "prePrompt")
 	prePrompt := d.getMapValue(sessNode, "prePrompt")
 	if prePrompt != nil {
+		d.writeBlockComment(sb, prePromptKey.HeadComment, "    ")
 		if prePrompt.Kind == yaml.SequenceNode {
 			for _, p := range prePrompt.Content {
 				d.writePromptItem(sb, p.Value, "+")
@@ -363,8 +440,10 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 			d.writePromptItem(sb, prePrompt.Value, "+")
 		}
 	}
+	promptKey := d.getMapKey(sessNode, "prompt")
 	prompt := d.getMapValue(sessNode, "prompt")
 	if prompt != nil {
+		d.writeBlockComment(sb, promptKey.HeadComment, "    ")
 		d.writePromptItem(sb, prompt.Value, "-")
 	}
 
@@ -386,23 +465,70 @@ func (d *Decompiler) writeSession(sb *strings.Builder, name string, sessNode *ya
 				if err := d.writeSchemaFields(sb, s, "        "); err != nil {
 					return err
 				}
-				sb.WriteString("    }\n")
+				sb.WriteString("    }")
+				if s.Description != "" {
+					sb.WriteString(fmt.Sprintf(" # %s", s.Description))
+				}
+				sb.WriteString("\n")
 			} else {
 				// Avoid writing 'schema any' for default empty session schemas
 				if s.Type == parser.TypeObject && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
 					continue
 				}
 
-				ft, err := d.formatType(s)
+				ft, err := d.formatType(s, "    ")
 				if err != nil {
 					return err
 				}
-				sb.WriteString(fmt.Sprintf("    schema%s %s\n", opt, ft))
+				sb.WriteString(fmt.Sprintf("    schema%s %s", opt, ft))
+				if s.Description != "" {
+					sb.WriteString(fmt.Sprintf(" # %s", s.Description))
+				}
+				sb.WriteString("\n")
 			}
 		}
 	}
 
 	sb.WriteString("}\n")
+	return nil
+}
+
+func (d *Decompiler) writeCall(sb *strings.Builder, cNode *yaml.Node, indent string) error {
+	d.writeBlockComment(sb, cNode.HeadComment, indent)
+	cNameNode := d.getMapValue(cNode, "name")
+	if cNameNode == nil {
+		return fmt.Errorf("call node missing 'name'")
+	}
+	cName := cNameNode.Value
+	sb.WriteString(fmt.Sprintf("%scall(%q)", indent, cName))
+
+	in := d.getMapValue(cNode, "in")
+	target := d.getMapValue(cNode, "var")
+	if target != nil {
+		if in != nil && in.Value != "vars" && in.Value != "ai" {
+			sb.WriteString(fmt.Sprintf(" -> %s:%s", in.Value, target.Value))
+		} else {
+			sb.WriteString(fmt.Sprintf(" -> %s", target.Value))
+		}
+	}
+
+	args := d.getMapValue(cNode, "args")
+	code := d.getMapValue(cNode, "code")
+
+	if args != nil || code != nil {
+		sb.WriteString(" {\n")
+		if args != nil {
+			for i := 0; i+1 < len(args.Content); i += 2 {
+				sb.WriteString(fmt.Sprintf("%s    %s = %s\n", indent, args.Content[i].Value, d.formatValue(args.Content[i+1])))
+			}
+		}
+		if code != nil {
+			sb.WriteString(fmt.Sprintf("%s    code( %s )\n", indent, code.Value))
+		}
+		sb.WriteString(fmt.Sprintf("%s}\n", indent))
+	} else {
+		sb.WriteString("\n")
+	}
 	return nil
 }
 
@@ -430,16 +556,20 @@ func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSche
 		if !isRequired {
 			sb.WriteString("?")
 		}
-		ft, err := d.formatType(prop)
+		ft, err := d.formatType(prop, indent)
 		if err != nil {
 			return err
 		}
-		sb.WriteString(fmt.Sprintf(": %s\n", ft))
+		sb.WriteString(fmt.Sprintf(": %s", ft))
+		if prop.Description != "" && !strings.Contains(ft, "\n") {
+			sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
+		}
+		sb.WriteString("\n")
 	}
 	return nil
 }
 
-func (d *Decompiler) formatType(s *compiler.JSONSchema) (string, error) {
+func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, error) {
 	if s == nil {
 		return "any", nil
 	}
@@ -460,9 +590,12 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) (string, error) {
 		return "float", nil
 	case parser.TypeArray:
 		if s.Items != nil {
-			ft, err := d.formatType(s.Items)
+			ft, err := d.formatType(s.Items, indent)
 			if err != nil {
 				return "", err
+			}
+			if strings.Contains(ft, "\n") {
+				return ft + "[]", nil
 			}
 			return ft + "[]", nil
 		}
@@ -471,6 +604,44 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) (string, error) {
 		if len(s.Properties) == 0 {
 			return "any", nil
 		}
+		hasDescriptions := false
+		for _, prop := range s.Properties {
+			if prop.Description != "" {
+				hasDescriptions = true
+				break
+			}
+		}
+
+		if hasDescriptions || len(s.Properties) > 3 {
+			var sb strings.Builder
+			sb.WriteString("{\n")
+			newIndent := indent + "    "
+			for name, prop := range s.Properties {
+				sb.WriteString(newIndent + name)
+				isRequired := false
+				for _, r := range s.Required {
+					if r == name {
+						isRequired = true
+						break
+					}
+				}
+				if !isRequired {
+					sb.WriteString("?")
+				}
+				ft, err := d.formatType(prop, newIndent)
+				if err != nil {
+					return "", err
+				}
+				sb.WriteString(": " + ft)
+				if prop.Description != "" {
+					sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
+				}
+				sb.WriteString("\n")
+			}
+			sb.WriteString(indent + "}")
+			return sb.String(), nil
+		}
+
 		var sb strings.Builder
 		sb.WriteString("{")
 		first := true
@@ -478,7 +649,7 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema) (string, error) {
 			if !first {
 				sb.WriteString(", ")
 			}
-			ft, err := d.formatType(prop)
+			ft, err := d.formatType(prop, indent)
 			if err != nil {
 				return "", err
 			}
@@ -547,4 +718,27 @@ func (d *Decompiler) getMapValue(node *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+func (d *Decompiler) getMapKey(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i]
+		}
+	}
+	return nil
+}
+
+func (d *Decompiler) writeBlockComment(sb *strings.Builder, comment string, indent string) {
+	if comment == "" {
+		return
+	}
+	lines := strings.Split(comment, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "#"))
+		sb.WriteString(fmt.Sprintf("%s# %s\n", indent, trimmed))
+	}
 }

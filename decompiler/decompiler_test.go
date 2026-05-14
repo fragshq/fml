@@ -223,15 +223,23 @@ func TestDecompiler_UseWithAllowlist(t *testing.T) {
 	assert.Equal(t, string(y1), string(y2))
 }
 
-func TestDecompiler_Resources(t *testing.T) {
+func TestDecompiler_SchemaDescriptions(t *testing.T) {
 	input := `session("s") {
-    resource "data.csv"
-    resource "prompt.txt" -> vars:template
-    resource "config.json" -> myConfig
+    schema {
+        name: string # The user's name
+        age?: int # The user's age
+    }
+}
+
+components {
+    schema("User") {
+        id: string # Unique identifier
+    }
 }
 `
 	p, _ := parser.NewParser()
-	plan, _ := p.ParseString("test.frags", input)
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
 	comp := compiler.New(plan)
 	planYAML, err := comp.Compile()
 	assert.NoError(t, err)
@@ -240,15 +248,256 @@ func TestDecompiler_Resources(t *testing.T) {
 	output, err := dec.Decompile()
 	assert.NoError(t, err)
 
-	assert.Contains(t, output, `resource "data.csv"`)
-	assert.Contains(t, output, `resource "prompt.txt" -> template`)
-	assert.Contains(t, output, `resource "config.json" -> myConfig`)
+	assert.Contains(t, output, `name: string # The user's name`)
+	assert.Contains(t, output, `age?: int # The user's age`)
+	assert.Contains(t, output, `id: string # Unique identifier`)
+}
+
+func TestDecompiler_SchemaBlockDescription(t *testing.T) {
+	input := `session("s") {
+    schema {
+        field: string
+    } # Session level description
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `} # Session level description`)
+}
+
+func TestDecompiler_ComponentSchemaDescription(t *testing.T) {
+	input := `components {
+    schema("User") {
+        id: string
+    } # User object description
+}
+
+session("s") {
+    - Prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `} # User object description`)
+}
+
+func TestDecompiler_ComponentPromptDescription(t *testing.T) {
+	input := `components {
+    prompt("Base") {
+        "You are a helpful assistant."
+    } # System prompt base
+}
+
+session("s") {
+    - Prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `} # System prompt base`)
+}
+
+func TestDecompiler_ParameterDescription(t *testing.T) {
+	input := `parameter("p1", type=string) # The parameter description
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `parameter("p1", type=string) # The parameter description`)
+}
+
+func TestDecompiler_ParameterDescriptionYAML(t *testing.T) {
+	yamlInput := `
+parameters:
+  - name: p1
+    schema:
+      type: string
+      description: "Manual description"
+`
+	var plan compiler.PlanYAML
+	err := yaml.Unmarshal([]byte(yamlInput), &plan)
+	assert.NoError(t, err)
+
+	dec := New(&plan)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `parameter("p1", type=string) # Manual description`)
+}
+
+func TestDecompiler_ParameterComplexDescription(t *testing.T) {
+	input := `parameter("config", type={
+    url: string # The API URL
+}) # Overall config
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `parameter("config", type={`)
+	assert.Contains(t, output, `url: string # The API URL`)
+	assert.Contains(t, output, `}) # Overall config`)
+}
+
+func TestDecompiler_ParameterCapture(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected string
+	}{
+		{
+			name: "Inline comment on parameter node",
+			yaml: `
+parameters:
+  - name: p1 # Comment A
+    schema: {type: string}
+`,
+			expected: `parameter("p1", type=string) # Comment A`,
+		},
+		{
+			name: "Inline comment on schema node",
+			yaml: `
+parameters:
+  - name: p2
+    schema: {type: string} # Comment B
+`,
+			expected: `parameter("p2", type=string) # Comment B`,
+		},
+		{
+			name: "Description field at parameter level",
+			yaml: `
+parameters:
+  - name: p3
+    description: "Description C"
+    schema: {type: string}
+`,
+			expected: `parameter("p3", type=string) # Description C`,
+		},
+		{
+			name: "Description field inside schema",
+			yaml: `
+parameters:
+  - name: p4
+    schema:
+      type: string
+      description: "Description D"
+`,
+			expected: `parameter("p4", type=string) # Description D`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var plan compiler.PlanYAML
+			err := yaml.Unmarshal([]byte(tt.yaml), &plan)
+			assert.NoError(t, err)
+
+			dec := New(&plan)
+			output, err := dec.Decompile()
+			assert.NoError(t, err)
+
+			assert.Contains(t, output, tt.expected)
+		})
+	}
+}
+
+func TestDecompiler_GenericComments(t *testing.T) {
+	yamlInput := `
+# Top level comment
+systemPrompt: "Sys"
+# Parameter block comment
+parameters:
+  - name: p1
+    schema: {type: string}
+# Call block comment
+preCalls:
+  - name: tool1
+# Session block comment
+sessions:
+  # S1 comment
+  s1:
+    prompt: hello
+`
+	var plan compiler.PlanYAML
+	err := yaml.Unmarshal([]byte(yamlInput), &plan)
+	assert.NoError(t, err)
+
+	dec := New(&plan)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, "# Top level comment")
+	assert.Contains(t, output, "# Parameter block comment")
+	assert.Contains(t, output, "# Call block comment")
+	assert.Contains(t, output, "# Session block comment")
+	assert.Contains(t, output, "# S1 comment")
+}
+
+func TestDecompiler_GlobalPreCalls(t *testing.T) {
+	input := `call("globalTool") -> res {
+    arg1 = "val"
+}
+
+session("s") {
+    - Prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, _ := comp.Compile()
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `call("globalTool") -> res`)
 
 	// Round-trip
 	plan2, err := p.ParseString("roundtrip.frags", output)
-	if err != nil {
-		t.Fatalf("Failed to parse decompiled output: %v\nOutput was:\n%s", err, output)
-	}
+	assert.NoError(t, err)
 	comp2 := compiler.New(plan2)
 	planYAML2, _ := comp2.Compile()
 

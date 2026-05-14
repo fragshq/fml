@@ -344,6 +344,9 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 				Type:       parser.TypeObject,
 				Properties: make(map[string]*JSONSchema),
 			}
+			if item.Schema.InlineComment != nil {
+				schema.Description = strings.TrimSpace(strings.TrimPrefix(*item.Schema.InlineComment, "#"))
+			}
 			for _, field := range item.Schema.Fields {
 				fSchema, err := c.compileType(field.Type)
 				if err != nil {
@@ -360,7 +363,7 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 			}
 			c.output.Components.Schemas[item.Schema.Name] = schema
 		} else if item.Prompt != nil {
-			node, err := c.nodeValue(item.Prompt.Value, nil)
+			node, err := c.nodeValue(item.Prompt.Value, item.Prompt.InlineComment)
 			if err != nil {
 				return err
 			}

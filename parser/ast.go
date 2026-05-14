@@ -115,13 +115,15 @@ type ComponentItem struct {
 }
 
 type SchemaComponent struct {
-	Name   string         `"schema" "(" @String ")" "{"`
-	Fields []*SchemaField `(@@ (","? @@)*)? "}"`
+	Name          string         `"schema" "(" @String ")" "{"`
+	Fields        []*SchemaField `(@@ (","? @@)*)? "}"`
+	InlineComment *string        `@InlineComment?`
 }
 
 type PromptComponent struct {
-	Name  string `"prompt" "(" @String ")" "{"`
-	Value string `@String "}"`
+	Name          string  `"prompt" "(" @String ")" "{"`
+	Value         string  `@String "}"`
+	InlineComment *string `@InlineComment?`
 }
 
 // SessionBlock represents a logical pipeline step with its own context, tools, and output schema.

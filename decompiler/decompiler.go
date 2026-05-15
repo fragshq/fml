@@ -9,6 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type sessionProp struct {
+	Name   string
+	Schema *compiler.JSONSchema
+}
+
 // Decompiler converts a Frags YAML plan back into FML source code.
 type Decompiler struct {
 	plan *compiler.PlanYAML
@@ -115,8 +120,10 @@ func (d *Decompiler) Decompile() (string, error) {
 	// Session processing
 	if d.plan.Sessions != nil && len(d.plan.Sessions.Content) > 0 {
 		d.writeBlockComment(&sb, d.plan.Comments["sessions"], "")
-		sessionSchemas := make(map[string]map[string]*compiler.JSONSchema)
+
+		sessionSchemas := make(map[string][]sessionProp)
 		requiredProps := make(map[string]bool)
+
 		if d.plan.Schema != nil {
 			var rootSchema compiler.JSONSchema
 			if err := d.plan.Schema.Decode(&rootSchema); err != nil {
@@ -125,12 +132,20 @@ func (d *Decompiler) Decompile() (string, error) {
 			for _, r := range rootSchema.Required {
 				requiredProps[r] = true
 			}
-			for propName, s := range rootSchema.Properties {
-				if s != nil && s.XSession != "" {
-					if _, ok := sessionSchemas[s.XSession]; !ok {
-						sessionSchemas[s.XSession] = make(map[string]*compiler.JSONSchema)
+
+			// Traverse the schema node to find properties in their original YAML order
+			propsNode := d.getMapValue(d.plan.Schema, "properties")
+			if propsNode != nil {
+				for i := 0; i+1 < len(propsNode.Content); i += 2 {
+					propName := propsNode.Content[i].Value
+					valNode := propsNode.Content[i+1]
+					var s compiler.JSONSchema
+					if err := valNode.Decode(&s); err == nil && s.XSession != "" {
+						sessionSchemas[s.XSession] = append(sessionSchemas[s.XSession], sessionProp{
+							Name:   propName,
+							Schema: &s,
+						})
 					}
-					sessionSchemas[s.XSession][propName] = s
 				}
 			}
 		}
@@ -281,16 +296,14 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) erro
 	return nil
 }
 
-func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessNode *yaml.Node, schemas map[string]*compiler.JSONSchema, requiredProps map[string]bool) error {
+func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessNode *yaml.Node, schemas []sessionProp, requiredProps map[string]bool) error {
 	d.writeBlockComment(sb, keyNode.HeadComment, "")
 	name := keyNode.Value
 	sb.WriteString(fmt.Sprintf("session(%q", name))
 
 	if len(schemas) == 1 {
-		for propName := range schemas {
-			if propName != name {
-				sb.WriteString(fmt.Sprintf(", target=%q", propName))
-			}
+		if schemas[0].Name != name {
+			sb.WriteString(fmt.Sprintf(", target=%q", schemas[0].Name))
 		}
 	}
 
@@ -440,7 +453,9 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 	// Schema
 	if len(schemas) > 0 {
 		isIterated := it != nil
-		for propName, s := range schemas {
+		for _, sp := range schemas {
+			propName := sp.Name
+			s := sp.Schema
 			if isIterated && s.Type == parser.TypeArray && s.Items != nil {
 				s = s.Items
 			}
@@ -604,59 +619,33 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 		if len(s.Properties) == 0 {
 			return "any", nil
 		}
-		hasDescriptions := false
-		for _, prop := range s.Properties {
-			if prop.Description != "" {
-				hasDescriptions = true
-				break
-			}
-		}
-
-		if hasDescriptions || len(s.Properties) > 3 {
-			var sb strings.Builder
-			sb.WriteString("{\n")
-			newIndent := indent + "    "
-			for name, prop := range s.Properties {
-				sb.WriteString(newIndent + name)
-				isRequired := false
-				for _, r := range s.Required {
-					if r == name {
-						isRequired = true
-						break
-					}
-				}
-				if !isRequired {
-					sb.WriteString("?")
-				}
-				ft, err := d.formatType(prop, newIndent)
-				if err != nil {
-					return "", err
-				}
-				sb.WriteString(": " + ft)
-				if prop.Description != "" {
-					sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
-				}
-				sb.WriteString("\n")
-			}
-			sb.WriteString(indent + "}")
-			return sb.String(), nil
-		}
 
 		var sb strings.Builder
-		sb.WriteString("{")
-		first := true
+		sb.WriteString("{\n")
+		newIndent := indent + "    "
 		for name, prop := range s.Properties {
-			if !first {
-				sb.WriteString(", ")
+			sb.WriteString(newIndent + name)
+			isRequired := false
+			for _, r := range s.Required {
+				if r == name {
+					isRequired = true
+					break
+				}
 			}
-			ft, err := d.formatType(prop, indent)
+			if !isRequired {
+				sb.WriteString("?")
+			}
+			ft, err := d.formatType(prop, newIndent)
 			if err != nil {
 				return "", err
 			}
-			sb.WriteString(name + ": " + ft)
-			first = false
+			sb.WriteString(": " + ft)
+			if prop.Description != "" {
+				sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
+			}
+			sb.WriteString("\n")
 		}
-		sb.WriteString("}")
+		sb.WriteString(indent + "}")
 		return sb.String(), nil
 	case "":
 		return "any", nil

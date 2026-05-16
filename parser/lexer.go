@@ -51,6 +51,10 @@ type fragsLexer struct {
 	lastIdent          string
 }
 
+func (l *fragsLexer) lexerErrorf(pos lexer.Position, format string, args ...interface{}) error {
+	return &LexerError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
+}
+
 func (l *fragsLexer) Next() (lexer.Token, error) {
 	for {
 		if l.pos.Column == 1 {
@@ -168,7 +172,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				}
 			}
 		default:
-			return lexer.Token{}, fmt.Errorf("%s: illegal character %q", l.pos, r)
+			return lexer.Token{}, l.lexerErrorf(l.pos, "illegal character %q", r)
 		}
 	}
 
@@ -194,7 +198,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 	}
 
 	if depth > 0 {
-		return lexer.Token{}, fmt.Errorf("%s: unclosed balanced block (missing %q)", startPos, end)
+		return lexer.Token{}, l.lexerErrorf(startPos, "unclosed balanced block (missing %q)", end)
 	}
 
 	val := l.s[:i]
@@ -280,15 +284,15 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 	i := 1
 	for i < len(l.s) {
 		if l.isNewline(i) {
-			return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+			return lexer.Token{}, l.lexerErrorf(startPos, "unterminated string literal")
 		}
 		if l.isAt(i, '\\') {
 			if i+1 >= len(l.s) {
-				return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+				return lexer.Token{}, l.lexerErrorf(startPos, "unterminated string literal")
 			}
 			esc := l.s[i+1]
 			if esc != '"' && esc != '\\' && esc != 'n' && esc != 'r' && esc != 't' {
-				return lexer.Token{}, fmt.Errorf("%s: invalid escape sequence \\%c", l.pos, esc)
+				return lexer.Token{}, l.lexerErrorf(l.pos, "invalid escape sequence \\%c", esc)
 			}
 			i += 2
 			continue
@@ -297,14 +301,14 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 			val := l.s[:i+1]
 			// Validate template tags {{ }} are balanced
 			if strings.Count(val, "{{") != strings.Count(val, "}}") {
-				return lexer.Token{}, fmt.Errorf("%s: malformed template tags in string", startPos)
+				return lexer.Token{}, l.lexerErrorf(startPos, "malformed template tags in string")
 			}
 			i++
 			return l.consume(i, SymString), nil
 		}
 		i++
 	}
-	return lexer.Token{}, fmt.Errorf("%s: unterminated string literal", startPos)
+	return lexer.Token{}, l.lexerErrorf(startPos, "unterminated string literal")
 }
 
 func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
@@ -318,13 +322,13 @@ func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
 		if l.isAt(i, '.') {
 			dots++
 			if dots > 1 {
-				return lexer.Token{}, fmt.Errorf("%s: malformed number (multiple decimal points)", startPos)
+				return lexer.Token{}, l.lexerErrorf(startPos, "malformed number (multiple decimal points)")
 			}
 		}
 		i++
 	}
 	if l.isAt(i-1, '.') {
-		return lexer.Token{}, fmt.Errorf("%s: malformed number (trailing decimal point)", startPos)
+		return lexer.Token{}, l.lexerErrorf(startPos, "malformed number (trailing decimal point)")
 	}
 	return l.consume(i, SymNumber), nil
 }
@@ -383,7 +387,7 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 	val := l.s[:totalLen]
 	// Validate template tags
 	if strings.Count(val, "{{") != strings.Count(val, "}}") {
-		return lexer.Token{}, fmt.Errorf("%s: malformed template tags in prompt item", startPos)
+		return lexer.Token{}, l.lexerErrorf(startPos, "malformed template tags in prompt item")
 	}
 
 	typ := TokenPromptItem

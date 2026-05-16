@@ -2,8 +2,6 @@ package lsp
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
@@ -81,32 +79,21 @@ func (h *FMLHandler) diagnose(ctx context.Context, uri lsp.DocumentURI, text str
 	if err == nil {
 		_, err = p.ParseString(string(uri), text)
 		if err != nil {
-			msg := err.Error()
 			severity := lsp.SeverityError
 			diag := lsp.Diagnostic{
 				Severity: &severity,
-				Message:  msg,
+				Message:  err.Error(),
 				Range: lsp.Range{
 					Start: lsp.Position{Line: 0, Character: 0},
 					End:   lsp.Position{Line: 0, Character: 0},
 				},
 			}
 
-			// Try to parse line and column from the error message
-			// Format: <filename>:<line>:<col>: <message>
-			parts := strings.SplitN(msg, ":", 4)
-			if len(parts) >= 3 {
-				var line, col int
-				_, errLine := fmt.Sscanf(parts[1], "%d", &line)
-				_, errCol := fmt.Sscanf(parts[2], "%d", &col)
-				if errLine == nil && errCol == nil {
-					// LSP uses 0-based indexing
-					pos := lsp.Position{Line: line - 1, Character: col - 1}
-					diag.Range = lsp.Range{Start: pos, End: pos}
-					if len(parts) > 3 {
-						diag.Message = strings.TrimSpace(parts[3])
-					}
-				}
+			if pos, msg, ok := parser.ErrorPosition(err); ok {
+				// LSP uses 0-based indexing
+				lspPos := lsp.Position{Line: pos.Line - 1, Character: pos.Column - 1}
+				diag.Range = lsp.Range{Start: lspPos, End: lspPos}
+				diag.Message = msg
 			}
 			diagnostics = append(diagnostics, diag)
 		}

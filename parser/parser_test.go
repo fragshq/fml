@@ -130,3 +130,51 @@ func TestParser_UseWithAllowlist(t *testing.T) {
 	assert.Len(t, stmts[0].Use.Fields, 1)
 	assert.Equal(t, []string{"m1", "m2"}, stmts[0].Use.Fields[0].Allowlist)
 }
+
+func TestParser_ErrorPosition_ParserError(t *testing.T) {
+	p, _ := NewParser()
+	input := `
+system("Sys")
+invalid_statement
+`
+	uri := "file:///home/user/test.fml"
+	_, err := p.ParseString(uri, input)
+	if err != nil {
+		pos, msg, ok := ErrorPosition(err)
+		if !ok {
+			t.Fatal("Expected ErrorPosition to be ok")
+		}
+		if pos.Line != 3 || pos.Column != 1 {
+			t.Errorf("Expected position 3:1, got %d:%d", pos.Line, pos.Column)
+		}
+		if msg != "unexpected token \"invalid_statement\"" {
+			t.Errorf("Expected message 'unexpected token \"invalid_statement\"', got %q", msg)
+		}
+	} else {
+		t.Error("Expected error but got nil")
+	}
+}
+
+func TestParser_ErrorPosition_LexerError(t *testing.T) {
+	p, _ := NewParser()
+	input := `
+system("Sys")
+"unclosed string
+`
+	uri := "file:///home/user/test.fml"
+	_, err := p.ParseString(uri, input)
+	if err != nil {
+		pos, msg, ok := ErrorPosition(err)
+		if !ok {
+			t.Fatal("Expected ErrorPosition to be ok")
+		}
+		if pos.Line != 3 || pos.Column != 1 {
+			t.Errorf("Expected position 3:1, got %d:%d", pos.Line, pos.Column)
+		}
+		if msg != "unterminated string literal" {
+			t.Errorf("Expected message 'unterminated string literal', got %q", msg)
+		}
+	} else {
+		t.Error("Expected error but got nil")
+	}
+}

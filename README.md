@@ -19,12 +19,8 @@ FML is a compact, human-readable Domain Specific Language designed for defining 
 git clone https://github.com/theirish81/fml.git
 cd fml
 
-# Build the compiler
+# Build the CLI
 go build -o fml main.go
-
-# Build the LSP server
-cd lsp
-go build -o fml-lsp main.go
 ```
 
 ## Usage
@@ -75,9 +71,9 @@ session("research") {
 
 For more details on the language, see [frags-dsl-spec.md](frags-dsl-spec.md).
 
-## LSP Server
+## LSP Library
 
-The FML LSP server provides IDE features. To use it in your editor (e.g., VS Code or Neovim), configure your LSP client to run the `fml-lsp` binary.
+The FML LSP is provided as a library in the `./lsp` directory. It can be integrated into Go applications to provide Language Server Protocol capabilities via Stdio, TCP, or WebSocket.
 
 Features supported:
 - Syntax Diagnostics
@@ -85,12 +81,14 @@ Features supported:
 - Autocompletion (Keywords, Types, Attributes)
 - Basic Hover
 
+For integration details, see [lsp/README.md](lsp/README.md).
+
 ## Project Structure
 
 - `parser/`: Lexer and AST definition.
 - `compiler/`: Logic for DSL to YAML transformation.
 - `decompiler/`: Logic for YAML to DSL transformation.
-- `lsp/`: Language Server Protocol implementation.
+- `lsp/`: Language Server Protocol library.
 - `main.go`: CLI entry point.
 
 ## License

@@ -476,8 +476,8 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 				}
 				sb.WriteString("\n")
 			} else {
-				// Avoid writing 'schema any' for default empty session schemas
-				if s.Type == parser.TypeObject && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
+				// Avoid writing default session schemas (previously empty object, now string)
+				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
 					continue
 				}
 

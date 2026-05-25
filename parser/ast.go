@@ -77,7 +77,7 @@ type CallTarget struct {
 
 type CallField struct {
 	Code          *string `("code" "(" @CodeValue ")"`
-	Ident         *string `| @Ident "="`
+	Ident         *string `| (@Ident | @String) "="`
 	Value         *Value  `@@)`
 	InlineComment *string `@InlineComment?`
 }
@@ -89,11 +89,16 @@ type SetStmt struct {
 }
 
 type Value struct {
-	String *string   `@String`
-	Number *float64  `| @Number`
-	Bool   *bool     `| @Bool`
-	Expr   *string   `| "$(" @CodeValue ")"`
-	Object *MapValue `| "{" @@ "}"`
+	String *string     `@String`
+	Number *float64    `| @Number`
+	Bool   *bool       `| @Bool`
+	Expr   *string     `| "$(" @CodeValue ")"`
+	Object *MapValue   `| "{" @@ "}"`
+	Array  *ArrayValue `| "[" @@ "]"`
+}
+
+type ArrayValue struct {
+	Values []*Value `(@@ (","? @@)*)?`
 }
 
 type MapValue struct {
@@ -101,7 +106,7 @@ type MapValue struct {
 }
 
 type MapEntry struct {
-	Key   string `@Ident ":"`
+	Key   string `(@Ident | @String) ":"`
 	Value *Value `@@`
 }
 
@@ -193,7 +198,7 @@ type SchemaBlock struct {
 
 type SchemaField struct {
 	LeadingComments []string  `@Comment*`
-	Name            string    `@Ident`
+	Name            string    `(@Ident | @String)`
 	Optional        bool      `@("?")? ":"`
 	Type            *TypeExpr `@@`
 	InlineComment   *string   `@InlineComment?`

@@ -131,6 +131,55 @@ func TestParser_UseWithAllowlist(t *testing.T) {
 	assert.Equal(t, []string{"m1", "m2"}, stmts[0].Use.Fields[0].Allowlist)
 }
 
+func TestParser_SetArray(t *testing.T) {
+	p, _ := NewParser()
+	input := `set tags = ["a", "b", "c"]`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	val := plan.Statements[0].Set.Value
+	assert.NotNil(t, val.Array)
+	assert.Len(t, val.Array.Values, 3)
+}
+
+func TestParser_DashInIdent(t *testing.T) {
+	p, _ := NewParser()
+
+	// Test dash in 'set' name
+	input1 := `set my-data = "value"`
+	plan1, err := p.ParseString("test.frags", input1)
+	assert.NoError(t, err)
+	assert.Equal(t, "my-data", plan1.Statements[0].Set.Name)
+
+	// Test dash in object key
+	input2 := `set config = { my-key: 123 }`
+	plan2, err := p.ParseString("test.frags", input2)
+	assert.NoError(t, err)
+	assert.Equal(t, "my-key", plan2.Statements[0].Set.Value.Object.Entries[0].Key)
+}
+
+func TestParser_QuotedKeys(t *testing.T) {
+	p, _ := NewParser()
+
+	// Test quoted key in object
+	input1 := `set config = { "quoted-key": 456 }`
+	plan1, err := p.ParseString("test.frags", input1)
+	assert.NoError(t, err)
+	assert.Equal(t, "quoted-key", plan1.Statements[0].Set.Value.Object.Entries[0].Key)
+
+	// Test quoted key in schema field
+	input2 := `session("s") { schema { "my field": string } }`
+	plan2, err := p.ParseString("test.frags", input2)
+	assert.NoError(t, err)
+	assert.Equal(t, "my field", plan2.Statements[0].Session.Statements[0].Schema.Type.Base.Object.Fields[0].Name)
+
+	// Test quoted key in call argument
+	input3 := `call("tool") { "arg-name" = 1 }`
+	plan3, err := p.ParseString("test.frags", input3)
+	assert.NoError(t, err)
+	assert.Equal(t, "arg-name", *plan3.Statements[0].Call.Fields[0].Ident)
+}
+
 func TestParser_ErrorPosition_ParserError(t *testing.T) {
 	p, _ := NewParser()
 	input := `

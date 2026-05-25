@@ -9,6 +9,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestDecompiler_ArraysAndDashes(t *testing.T) {
+	input := `set tags = ["a", "b", "c"]
+set my-config = {dashed-key: 1, "quoted key": 2}
+
+session("s") {
+    schema {
+        "my field": string
+    }
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, _ := comp.Compile()
+
+	decomp := New(planYAML)
+	output, err := decomp.Decompile()
+	assert.NoError(t, err)
+	assert.Contains(t, output, `set tags = ["a", "b", "c"]`)
+	assert.Contains(t, output, `dashed-key: 1`)
+	assert.Contains(t, output, `"quoted key": 2`)
+	assert.Contains(t, output, `"my field": string`)
+}
+
 func TestDecompiler_Basic(t *testing.T) {
 	input := `system("Sys")
 # The count

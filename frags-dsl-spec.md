@@ -58,7 +58,7 @@ NEWLINE      = "\n" | "\r\n"
 SP           = " " | "\t"                     # one or more horizontal spaces
 INDENT(n)    = exactly n spaces of leading whitespace (tabs count as 1 space)
 BLANK_LINE   = a line containing only SP* followed by NEWLINE
-IDENTIFIER   = [a-zA-Z_][a-zA-Z0-9_]*
+IDENTIFIER   = [a-zA-Z_][a-zA-Z0-9_-]*
 STRING_LIT   = '"' ( [^"\\] | '\\' . )* '"'   # standard JSON-style escaping
 NUMBER_LIT   = '-'? [0-9]+ ( '.' [0-9]+ )?
 BOOL_LIT     = "true" | "false"
@@ -131,7 +131,7 @@ TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
 CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? ("{" CallField* "}")?
 
-CallField    ← IDENTIFIER "=" Value NEWLINE
+CallField    ← (IDENTIFIER / STRING_LIT) "=" Value NEWLINE
              / CodeBlock
 
 CodeBlock    ← "code" "(" RawJS ")"
@@ -206,8 +206,8 @@ InlineText   ← [^\n]+
 SchemaBlock  ← "schema" "?"? "{" (SchemaField (","? SchemaField)*)? "}"
              / "schema" "?"? TypeExpr
 
-SchemaField  ← LeadingComment* IDENTIFIER "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
-             / LeadingComment* IDENTIFIER "?"? ":" ObjectBody                 INLINE_CMT? NEWLINE
+SchemaField  ← LeadingComment* (IDENTIFIER / STRING_LIT) "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
+             / LeadingComment* (IDENTIFIER / STRING_LIT) "?"? ":" ObjectBody                 INLINE_CMT? NEWLINE
 
 InlineSchemaExt ← "{" SchemaField* "}"   # for inline object expansion after ":"
 
@@ -238,6 +238,7 @@ LeadingComment ← SP* "#" InlineText NEWLINE          # comment line above a fi
 Value        ← LiteralValue
              / ExprValue
              / ObjectValue
+             / ArrayValue
 
 LiteralValue ← STRING_LIT | NUMBER_LIT | BOOL_LIT
 
@@ -245,7 +246,9 @@ ExprValue    ← "$(" RawExpr ")"
 RawExpr      ← ( [^()] / "(" RawExpr ")" )*  # balanced parens, recursive
 
 ObjectValue  ← "{" (ObjectEntry (","? ObjectEntry)*)? "}"
-ObjectEntry  ← IDENTIFIER ":" Value
+ObjectEntry  ← (IDENTIFIER / STRING_LIT) ":" Value
+
+ArrayValue   ← "[" (Value (","? Value)*)? "]"
 ```
 
 ---

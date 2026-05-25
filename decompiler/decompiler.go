@@ -476,8 +476,8 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 				}
 				sb.WriteString("\n")
 			} else {
-				// Avoid writing 'schema any' for default empty session schemas
-				if s.Type == parser.TypeObject && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
+				// Avoid writing default session schemas (previously empty object, now string)
+				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
 					continue
 				}
 
@@ -534,7 +534,7 @@ func (d *Decompiler) writeCall(sb *strings.Builder, cNode *yaml.Node, indent str
 		sb.WriteString(" {\n")
 		if args != nil {
 			for i := 0; i+1 < len(args.Content); i += 2 {
-				sb.WriteString(fmt.Sprintf("%s    %s = %s\n", indent, args.Content[i].Value, d.formatValue(args.Content[i+1])))
+				sb.WriteString(fmt.Sprintf("%s    %s = %s\n", indent, d.formatKey(args.Content[i].Value), d.formatValue(args.Content[i+1])))
 			}
 		}
 		if code != nil {
@@ -560,7 +560,7 @@ func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix st
 
 func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSchema, indent string) error {
 	for name, prop := range s.Properties {
-		sb.WriteString(fmt.Sprintf("%s%s", indent, name))
+		sb.WriteString(fmt.Sprintf("%s%s", indent, d.formatKey(name)))
 		isRequired := false
 		for _, r := range s.Required {
 			if r == name {
@@ -654,6 +654,26 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 	}
 }
 
+func (d *Decompiler) formatKey(key string) string {
+	// If it matches IDENTIFIER [a-zA-Z_][a-zA-Z0-9_-]*, no quotes needed.
+	// Otherwise, use %q.
+	if len(key) == 0 {
+		return `""`
+	}
+	for i, r := range key {
+		if i == 0 {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_') {
+				return fmt.Sprintf("%q", key)
+			}
+		} else {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+				return fmt.Sprintf("%q", key)
+			}
+		}
+	}
+	return key
+}
+
 func (d *Decompiler) formatValue(n *yaml.Node) string {
 	if n == nil {
 		return ""
@@ -677,7 +697,7 @@ func (d *Decompiler) formatValue(n *yaml.Node) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(fmt.Sprintf("%s: %s", n.Content[i].Value, d.formatValue(n.Content[i+1])))
+			sb.WriteString(fmt.Sprintf("%s: %s", d.formatKey(n.Content[i].Value), d.formatValue(n.Content[i+1])))
 		}
 		sb.WriteString("}")
 		return sb.String()

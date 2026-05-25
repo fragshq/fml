@@ -26,7 +26,20 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 	prefix := currentLine[:charPos]
 	trimmedPrefix := strings.TrimSpace(prefix)
 
-	var items []lsp.CompletionItem
+	// 0. Context awareness: no completions inside comments or prompts
+	if strings.HasPrefix(trimmedPrefix, "#") {
+		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+	}
+	if (strings.HasPrefix(trimmedPrefix, "+") || strings.HasPrefix(trimmedPrefix, "-")) && (len(trimmedPrefix) > 1 || strings.HasSuffix(prefix, " ")) {
+		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+	}
+
+	// 0.1 Prompt continuation awareness
+	if h.isInPromptContinuation(lines, params.Position.Line) {
+		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+	}
+
+	blockType := h.findBlockType(lines, params.Position.Line)
 
 	// 1. Tool types after "use" or "require"
 	if strings.HasSuffix(trimmedPrefix, "use") || strings.HasSuffix(trimmedPrefix, "require") {
@@ -44,26 +57,40 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 		return &lsp.CompletionList{Items: attributeCompletions(trimmedPrefix)}, nil
 	}
 
-	// 3.1 Transformer Fields
-	if strings.HasPrefix(trimmedPrefix, "transformer") || (len(prefix) > 0 && (prefix[0] == ' ' || prefix[0] == '\t')) {
-		items = append(items, transformerFieldCompletions()...)
+	// 4. Transformer Fields
+	if blockType == "transformer" {
+		return &lsp.CompletionList{Items: transformerFieldCompletions()}, nil
 	}
 
-	// 3.2 Parser values after "parser ="
+	// 5. Parser values after "parser ="
 	if strings.HasSuffix(trimmedPrefix, "parser =") || strings.HasSuffix(trimmedPrefix, "parser = ") {
 		return &lsp.CompletionList{Items: parserValueCompletions()}, nil
 	}
 
-	// 4. Session-level keywords (indented or inside a block)
-	if len(prefix) > 0 && (prefix[0] == ' ' || prefix[0] == '\t') {
+	// 6. Session-level keywords
+	if blockType == "session" {
 		return &lsp.CompletionList{Items: sessionKeywordCompletions()}, nil
 	}
 
-	// 5. Top-level blocks (not indented)
-	return &lsp.CompletionList{
-		IsIncomplete: false,
-		Items:        topLevelKeywordCompletions(),
-	}, nil
+	// 6.1 Use block keywords
+	if blockType == "use" {
+		return &lsp.CompletionList{Items: useBlockCompletions()}, nil
+	}
+
+	// 6.2 Components block keywords
+	if blockType == "components" {
+		return &lsp.CompletionList{Items: componentsKeywordCompletions()}, nil
+	}
+
+	// 7. Top-level blocks
+	if blockType == "top" {
+		return &lsp.CompletionList{
+			IsIncomplete: false,
+			Items:        topLevelKeywordCompletions(),
+		}, nil
+	}
+
+	return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 }
 
 func toolTypeCompletions() []lsp.CompletionItem {
@@ -125,7 +152,6 @@ func parserValueCompletions() []lsp.CompletionItem {
 func sessionKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
 		{Label: "use", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "use <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a tool requirement for the session."}},
-		{Label: "allowlist =", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "allowlist = [\"...\"]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Restricts the tools available from a server or collection."}},
 		{Label: "call", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "call(\"...\") [-> var] [{ ... }]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Invokes a tool or function. The fields block is optional."}},
 		{Label: "resource", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "resource \"...\" [-> [ns:]var]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Specifies an external file or data source to be associated with the session."}},
 		{Label: "context", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "context ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the session context."}},
@@ -134,6 +160,19 @@ func sessionKeywordCompletions() []lsp.CompletionItem {
 		{Label: "set", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "set var = ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a variable."}},
 		{Label: "+", Kind: ptr(lsp.CompletionItemKindSnippet), Detail: "+ <pre-prompt>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Starts a pre-prompt line."}},
 		{Label: "-", Kind: ptr(lsp.CompletionItemKindSnippet), Detail: "- <prompt>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Starts the main prompt line."}},
+	}
+}
+
+func useBlockCompletions() []lsp.CompletionItem {
+	return []lsp.CompletionItem{
+		{Label: "allowlist =", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "allowlist = [\"...\"]", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Restricts the tools available from a server or collection."}},
+	}
+}
+
+func componentsKeywordCompletions() []lsp.CompletionItem {
+	return []lsp.CompletionItem{
+		{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output schema."}},
+		{Label: "prompt", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "prompt(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable prompt component."}},
 	}
 }
 
@@ -147,4 +186,113 @@ func topLevelKeywordCompletions() []lsp.CompletionItem {
 		{Label: "components", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "components { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines reusable schemas and prompts."}},
 		{Label: "set", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "set var = ...", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a variable."}},
 	}
+}
+
+func (h *FMLHandler) isInPromptContinuation(lines []string, lineNum int) bool {
+	if lineNum <= 0 {
+		return false
+	}
+
+	// Find current line's indentation
+	currentLine := lines[lineNum]
+	currentIndent := 0
+	for _, r := range currentLine {
+		if r == ' ' || r == '\t' {
+			currentIndent++
+		} else {
+			break
+		}
+	}
+
+	for i := lineNum - 1; i >= 0; i-- {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// If we find a prompt marker line
+		if strings.HasPrefix(trimmed, "+") || strings.HasPrefix(trimmed, "-") {
+			markerIndent := 0
+			for j, r := range line {
+				if r == '+' || r == '-' {
+					markerIndent = j
+					break
+				}
+			}
+
+			// A continuation line must be indented deeper than the column of
+			// the "+" or "-" that opened the item.
+			if currentIndent > markerIndent {
+				return true
+			}
+			return false
+		}
+
+		// If we encounter a line that starts at a shallower indentation than current line
+		// and is not empty, it might be the end of the block.
+		lineIndent := 0
+		for _, r := range line {
+			if r == ' ' || r == '\t' {
+				lineIndent++
+			} else {
+				break
+			}
+		}
+		if lineIndent < currentIndent {
+			return false
+		}
+	}
+	return false
+}
+
+func (h *FMLHandler) findBlockType(lines []string, lineNum int) string {
+	currentLine := lines[lineNum]
+	trimmed := strings.TrimSpace(currentLine)
+
+	// If current line is not indented, it's top-level context (unless it's an empty line)
+	if len(currentLine) > 0 && currentLine[0] != ' ' && currentLine[0] != '\t' && trimmed != "" {
+		return "top"
+	}
+
+	// Scan backwards to find the nearest non-indented line or nested block opener
+	for i := lineNum - 1; i >= 0; i-- {
+		line := lines[i]
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine == "" {
+			continue
+		}
+
+		// Check for nested block start on the lines above
+		if strings.HasSuffix(trimmedLine, "{") {
+			if strings.HasPrefix(trimmedLine, "use") {
+				return "use"
+			}
+			if strings.HasPrefix(trimmedLine, "transformer") {
+				return "transformer"
+			}
+			if strings.HasPrefix(trimmedLine, "session") {
+				return "session"
+			}
+			if strings.HasPrefix(trimmedLine, "components") {
+				return "components"
+			}
+		}
+
+		// If we find a non-indented line, it's a top-level block header
+		if line[0] != ' ' && line[0] != '\t' {
+			if strings.HasPrefix(trimmedLine, "session") {
+				return "session"
+			}
+			if strings.HasPrefix(trimmedLine, "transformer") {
+				return "transformer"
+			}
+			if strings.HasPrefix(trimmedLine, "components") {
+				return "components"
+			}
+			return "top"
+		}
+	}
+
+	return "top"
 }

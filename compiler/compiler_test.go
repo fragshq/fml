@@ -22,6 +22,68 @@ func compileSource(t *testing.T, input string) (*PlanYAML, error) {
 	return c.Compile()
 }
 
+func TestCompiler_SetArray(t *testing.T) {
+	input := `set tags = ["a", "b", "c"]`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out.Vars)
+
+	// Vars is a MappingNode: [keyNode, valNode]
+	assert.Equal(t, "tags", out.Vars.Content[0].Value)
+	valNode := out.Vars.Content[1]
+
+	var tags []string
+	err = valNode.Decode(&tags)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"a", "b", "c"}, tags)
+}
+
+func TestCompiler_DashAndQuotedKeys(t *testing.T) {
+	input := `
+set my-config = { 
+  "quoted-key": 1,
+  dashed-key: 2
+}
+session("s") {
+  schema {
+    "my-field": string
+  }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	// Check vars
+	var config map[string]int
+	err = out.Vars.Content[1].Decode(&config)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, config["quoted-key"])
+	assert.Equal(t, 2, config["dashed-key"])
+
+	// Check schema
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+	assert.Contains(t, schema.Properties["s"].Properties, "my-field")
+}
+
+func TestCompiler_ParameterDefaultArray(t *testing.T) {
+	input := `parameter("tags", type=string[], default=["a", "b"])`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	require.Len(t, out.Parameters.Content, 1)
+
+	type Param struct {
+		Name   string     `yaml:"name"`
+		Schema JSONSchema `yaml:"schema"`
+	}
+	var p Param
+	err = out.Parameters.Content[0].Decode(&p)
+	assert.NoError(t, err)
+	assert.Equal(t, "tags", p.Name)
+	assert.Equal(t, []interface{}{"a", "b"}, p.Schema.Default)
+}
+
 func TestCompiler_SessionGrouping(t *testing.T) {
 	input := `
 session("s1") { schema { f1: string } }

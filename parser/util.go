@@ -36,7 +36,7 @@ func (l *fragsLexer) isIdentChar(i int) bool {
 	if c == 0 {
 		return false
 	}
-	return unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) || c == '_'
+	return unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)) || c == '_' || c == '-'
 }
 
 func (l *fragsLexer) isBool(val string) bool {

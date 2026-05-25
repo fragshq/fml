@@ -97,35 +97,38 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 		if err != nil {
 			return nil, err
 		}
-		schema, ok := c.sessionSchemas[name]
-		if !ok {
-			continue
-		}
-
-		// Iterate logic: entire session result is a collection.
-		iterateOn := ""
-		for i := 0; i+1 < len(sessNode.Content); i += 2 {
-			if sessNode.Content[i].Value == "iterateOn" {
-				iterateOn = sessNode.Content[i+1].Value
+		if schema, ok := c.sessionSchemas[name]; ok {
+			// If it's an object with no properties, it means no schema was declared.
+			// Default to string as it's more friendly for LLMs than an empty object.
+			if schema.Type == parser.TypeObject && len(schema.Properties) == 0 && schema.Ref == "" && len(schema.Enum) == 0 {
+				schema.Type = parser.TypeString
 			}
-		}
 
-		if iterateOn != "" && !c.isTypeArray(schema) {
-			schema = &JSONSchema{
-				Type:  parser.TypeArray,
-				Items: schema,
+			// Iterate logic: entire session result is a collection.
+			iterateOn := ""
+			for i := 0; i+1 < len(sessNode.Content); i += 2 {
+				if sessNode.Content[i].Value == "iterateOn" {
+					iterateOn = sessNode.Content[i+1].Value
+				}
 			}
-		}
 
-		schema.XSession = name
-		propName := name
-		if target, ok := c.sessionTargets[name]; ok {
-			propName = target
-		}
-		rootSchema.Properties[propName] = schema
+			if iterateOn != "" && !c.isTypeArray(schema) {
+				schema = &JSONSchema{
+					Type:  parser.TypeArray,
+					Items: schema,
+				}
+			}
 
-		if !c.sessionOptional[name] {
-			rootSchema.Required = append(rootSchema.Required, propName)
+			schema.XSession = name
+			propName := name
+			if target, ok := c.sessionTargets[name]; ok {
+				propName = target
+			}
+			rootSchema.Properties[propName] = schema
+
+			if !c.sessionOptional[name] {
+				rootSchema.Required = append(rootSchema.Required, propName)
+			}
 		}
 	}
 
@@ -843,6 +846,12 @@ func (c *Compiler) compileValue(v *parser.Value) interface{} {
 			m[entry.Key] = c.compileValue(entry.Value)
 		}
 		return m
+	case v.Array != nil:
+		var arr []interface{}
+		for _, val := range v.Array.Values {
+			arr = append(arr, c.compileValue(val))
+		}
+		return arr
 	}
 	return nil
 }

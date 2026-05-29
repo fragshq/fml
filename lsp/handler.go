@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
@@ -28,7 +29,11 @@ func (h *FMLHandler) Initialize(ctx context.Context, params *lsp.InitializeParam
 			CompletionProvider: &lsp.CompletionOptions{
 				TriggerCharacters: []string{"(", ",", ":", "=", "$", " "},
 			},
-			HoverProvider: ptr(true),
+			HoverProvider:              ptr(true),
+			DocumentFormattingProvider: ptr(true),
+			DocumentOnTypeFormattingProvider: &lsp.DocumentOnTypeFormattingOptions{
+				FirstTriggerCharacter: "\n",
+			},
 			SemanticTokensProvider: &lsp.SemanticTokensOptions{
 				Legend: lsp.SemanticTokensLegend{
 					TokenTypes: []string{
@@ -70,6 +75,63 @@ func (h *FMLHandler) DidChange(ctx context.Context, params *lsp.DidChangeTextDoc
 func (h *FMLHandler) DidClose(ctx context.Context, params *lsp.DidCloseTextDocumentParams) error {
 	delete(h.documents, params.TextDocument.URI)
 	return nil
+}
+
+func (h *FMLHandler) OnTypeFormatting(ctx context.Context, params *lsp.DocumentOnTypeFormattingParams) ([]lsp.TextEdit, error) {
+	if params.Character != "\n" {
+		return nil, nil
+	}
+
+	text, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return nil, nil
+	}
+
+	lines := strings.Split(text, "\n")
+	if params.Position.Line <= 0 || params.Position.Line >= len(lines) {
+		return nil, nil
+	}
+
+	prevLine := lines[params.Position.Line-1]
+	trimmedPrev := strings.TrimSpace(prevLine)
+	if trimmedPrev == "" {
+		return nil, nil
+	}
+
+	// Calculate base indentation of previous line
+	indent := ""
+	for _, r := range prevLine {
+		if r == ' ' || r == '\t' {
+			indent += string(r)
+		} else {
+			break
+		}
+	}
+
+	newIndent := indent
+	// Rules for promoting indentation
+	if strings.HasSuffix(trimmedPrev, "{") {
+		// Basic block indentation
+		tabSize := params.Options.TabSize
+		if tabSize <= 0 {
+			tabSize = 2
+		}
+		if params.Options.InsertSpaces {
+			newIndent += strings.Repeat(" ", tabSize)
+		} else {
+			newIndent += "\t"
+		}
+	}
+
+	return []lsp.TextEdit{
+		{
+			Range: lsp.Range{
+				Start: lsp.Position{Line: params.Position.Line, Character: 0},
+				End:   lsp.Position{Line: params.Position.Line, Character: params.Position.Character},
+			},
+			NewText: newIndent,
+		},
+	}, nil
 }
 
 func (h *FMLHandler) diagnose(ctx context.Context, uri lsp.DocumentURI, text string) {

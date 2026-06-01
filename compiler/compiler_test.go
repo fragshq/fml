@@ -84,6 +84,30 @@ func TestCompiler_ParameterDefaultArray(t *testing.T) {
 	assert.Equal(t, []interface{}{"a", "b"}, p.Schema.Default)
 }
 
+func TestCompiler_ParameterEnum(t *testing.T) {
+	input := `parameter("p", type=string, enum=a|b|c)`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	require.Len(t, out.Parameters.Content, 1)
+
+	var p struct {
+		Name   string     `yaml:"name"`
+		Schema JSONSchema `yaml:"schema"`
+	}
+	err = out.Parameters.Content[0].Decode(&p)
+	assert.NoError(t, err)
+	assert.Equal(t, "p", p.Name)
+	assert.Equal(t, "string", p.Schema.Type)
+	assert.Equal(t, []interface{}{"a", "b", "c"}, p.Schema.Enum)
+}
+
+func TestCompiler_ParameterEnumConflict(t *testing.T) {
+	input := `parameter("p", type=int, enum=a|b|c)`
+	_, err := compileSource(t, input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "enum can only be used with string type")
+}
+
 func TestCompiler_SessionGrouping(t *testing.T) {
 	input := `
 session("s1") { schema { f1: string } }

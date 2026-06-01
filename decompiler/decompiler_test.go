@@ -385,6 +385,41 @@ parameters:
 	assert.Contains(t, output, `parameter("p1", type=string) # Manual description`)
 }
 
+func TestDecompiler_ParameterEnum(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "String Enum",
+			input:    `parameter("p", type=a|b|c)`,
+			expected: `parameter("p", type=a|b|c)`,
+		},
+		{
+			name:     "String Enum with explicit type",
+			input:    `parameter("p", type=string, enum=a|b|c)`,
+			expected: `parameter("p", type=a|b|c)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, _ := parser.NewParser()
+			plan, err := p.ParseString("test.frags", tt.input)
+			assert.NoError(t, err)
+			comp := compiler.New(plan)
+			planYAML, err := comp.Compile()
+			assert.NoError(t, err)
+
+			dec := New(planYAML)
+			output, err := dec.Decompile()
+			assert.NoError(t, err)
+			assert.Contains(t, output, tt.expected)
+		})
+	}
+}
+
 func TestDecompiler_ParameterComplexDescription(t *testing.T) {
 	input := `parameter("config", type={
     url: string # The API URL

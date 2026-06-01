@@ -115,6 +115,7 @@ ParameterBlock ← "parameter" "(" STRING_LIT ("," ParameterAttr)* ")"
 ParameterAttr  ← "type"    "=" TypeExpr
                / "default" "=" LiteralValue
                / "title"   "=" STRING_LIT
+               / "enum"    "=" TypeExpr
 
 # ── transformer ───────────────────────────────────────────────────────────────
 
@@ -287,6 +288,7 @@ parameter("full_name", type=string, default="Anonymous")
 - The `schema` field is the compiled JSON Schema for the `type` attribute.
 - If `default` is present, it is emitted **inside** the `schema` field.
 - If `title` is present, it is emitted **inside** the `schema` field.
+- If `enum` is present, it is emitted **inside** the `schema` field.
 - A leading comment on the line immediately above the statement becomes the parameter's
   `description` field inside `schema`.
 - An inline comment on the same line as the statement also becomes `description`.

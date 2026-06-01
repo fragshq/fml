@@ -44,7 +44,8 @@ type ParameterBlock struct {
 type ParameterAttr struct {
 	Type    *TypeExpr `( "type" "=" @@`
 	Default *Value    `| "default" "=" @@`
-	Title   *string   `| "title" "=" @String )`
+	Title   *string   `| "title" "=" @String`
+	Enum    *TypeExpr `| "enum" "=" @@ )`
 }
 
 type TransformerBlock struct {

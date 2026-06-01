@@ -82,6 +82,34 @@ func TestFMLHandler_Completion(t *testing.T) {
 	assert.True(t, foundMcp, "Should find 'mcp' completion after 'use '")
 }
 
+func TestFMLHandler_Completion_ParameterAttributes(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: "parameter(\"p\", \n",
+	}
+
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 0, Character: 15}, // after "parameter("p", "
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	foundEnum := false
+	for _, item := range resp.Items {
+		if item.Label == "enum=" {
+			foundEnum = true
+			break
+		}
+	}
+	assert.True(t, foundEnum, "Should find 'enum=' completion for parameter")
+}
+
 func TestFMLHandler_Completion_ContextAwareness(t *testing.T) {
 	handler := &FMLHandler{}
 	uri := lsp.DocumentURI("file:///test.fml")
@@ -281,6 +309,15 @@ func TestFMLHandler_Hover(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.Contents.Value, "Sets the global system prompt")
+
+	// Test "enum" hover
+	params.Position.Character = 0
+	handler.documents[uri] = "enum=a|b"
+	params.Position.Character = 2 // inside "enum"
+	resp, err = handler.Hover(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Contains(t, resp.Contents.Value, "Restricts a parameter or field")
 }
 
 func TestFMLHandler_SemanticTokens(t *testing.T) {

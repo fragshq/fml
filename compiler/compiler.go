@@ -210,12 +210,22 @@ func (c *Compiler) processParameter(p *parser.ParameterBlock) error {
 		return fmt.Errorf("parameter %q missing 'type'", p.Name)
 	}
 
-	// Apply default and title if present
+	// Apply default, title, and enum if present
 	for _, attr := range p.Attributes {
 		if attr.Default != nil {
 			param.Schema.Default = c.compileValue(attr.Default)
 		} else if attr.Title != nil {
 			param.Schema.Title = *attr.Title
+		} else if attr.Enum != nil {
+			if param.Schema.Type != "" && param.Schema.Type != parser.TypeString {
+				return fmt.Errorf("parameter %q: enum can only be used with string type", p.Name)
+			}
+			compiled, err := c.compileType(attr.Enum)
+			if err != nil {
+				return fmt.Errorf("parameter %q enum: %w", p.Name, err)
+			}
+			param.Schema.Type = parser.TypeString
+			param.Schema.Enum = compiled.Enum
 		}
 	}
 

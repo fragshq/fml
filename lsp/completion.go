@@ -126,6 +126,7 @@ func attributeCompletions(prefix string) []lsp.CompletionItem {
 		{Label: "type=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., type=...)"},
 		{Label: "default=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., default=...)"},
 		{Label: "title=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., title=\"...\")"},
+		{Label: "enum=", Kind: ptr(lsp.CompletionItemKindProperty), Detail: "parameter(..., enum=...)"},
 	}
 }
 

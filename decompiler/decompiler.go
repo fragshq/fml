@@ -591,7 +591,7 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 	if s.Ref != "" {
 		return "$" + strings.TrimPrefix(s.Ref, "#/components/schemas/"), nil
 	}
-	if len(s.Enum) > 0 {
+	if len(s.Enum) > 0 && (s.Type == parser.TypeString || s.Type == "") {
 		vals := make([]string, len(s.Enum))
 		for i, v := range s.Enum {
 			vals[i] = fmt.Sprintf("%v", v)

@@ -98,12 +98,6 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 			return nil, err
 		}
 		if schema, ok := c.sessionSchemas[name]; ok {
-			// If it's an object with no properties, it means no schema was declared.
-			// Default to string as it's more friendly for LLMs than an empty object.
-			if schema.Type == parser.TypeObject && len(schema.Properties) == 0 && schema.Ref == "" && len(schema.Enum) == 0 {
-				schema.Type = parser.TypeString
-			}
-
 			// Iterate logic: entire session result is a collection.
 			iterateOn := ""
 			for i := 0; i+1 < len(sessNode.Content); i += 2 {
@@ -416,14 +410,6 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 		c.sessionOrder = append(c.sessionOrder, s.Name)
 	}
 
-	if _, exists := c.sessionSchemas[s.Name]; !exists {
-		c.sessionSchemas[s.Name] = &JSONSchema{
-			Type:       parser.TypeObject,
-			Properties: make(map[string]*JSONSchema),
-		}
-	}
-	sessSchema := c.sessionSchemas[s.Name]
-
 	for _, attr := range s.Attributes {
 		switch attr.Type {
 		case "after":
@@ -514,8 +500,16 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 
 			// If it's a plain object (not array, not ref), we merge fields
 			if compiled.Type == parser.TypeObject && compiled.Items == nil && compiled.Ref == "" && len(compiled.Enum) == 0 {
-				// Refresh sessSchema in case it was replaced by anonymous type
-				sessSchema = c.sessionSchemas[s.Name]
+				// Initialize sessSchema if it doesn't exist
+				sessSchema, ok := c.sessionSchemas[s.Name]
+				if !ok {
+					sessSchema = &JSONSchema{
+						Type:       parser.TypeObject,
+						Properties: make(map[string]*JSONSchema),
+					}
+					c.sessionSchemas[s.Name] = sessSchema
+				}
+
 				if sessSchema.Properties == nil {
 					return fmt.Errorf("session %q has both anonymous schema and field schema", s.Name)
 				}

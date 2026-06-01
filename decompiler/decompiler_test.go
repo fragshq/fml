@@ -1,6 +1,7 @@
 package decompiler
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -523,7 +524,53 @@ session("s") {
 	plan2, err := p.ParseString("roundtrip.frags", output)
 	assert.NoError(t, err)
 	comp2 := compiler.New(plan2)
-	planYAML2, _ := comp2.Compile()
+	planYAML2, err := comp2.Compile()
+	assert.NoError(t, err)
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
+func TestDecompiler_MixedSchemaPresence(t *testing.T) {
+	input := `session("with_schema") {
+    schema {
+        f1: string
+    }
+}
+
+session("without_schema") {
+    - Just a prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `session("with_schema")`)
+	assert.Contains(t, output, `f1: string`)
+	assert.Contains(t, output, `session("without_schema")`)
+	assert.NotContains(t, output, `without_schema: string`) // Should not contain default string schema
+	assert.NotContains(t, output, `without_schema {`)
+
+	// Ensure without_schema session does not have a schema block
+	parts := strings.Split(output, `session("without_schema")`)
+	assert.Len(t, parts, 2)
+	assert.NotContains(t, parts[1], "schema")
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, err := comp2.Compile()
+	assert.NoError(t, err)
 
 	y1, _ := yaml.Marshal(planYAML)
 	y2, _ := yaml.Marshal(planYAML2)

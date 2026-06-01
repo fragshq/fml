@@ -594,7 +594,7 @@ session is responsible for filling.
 
 **Compilation rules:**
 
-- Each session contributes exactly one property to the **root** schema object.
+- Each session containing one `schema` block contributes exactly one property to the **root** schema object. If no `schema` block is present, no property is added for that session.
 - This property is named after the session (e.g., `session("mySess")` → property `mySess`).
 - The property is annotated with `x-session: <sessionName>`.
 - The property is added to the root schema's `required` array unless the schema block
@@ -839,13 +839,12 @@ plan-level `schema` object.
 **Rules:**
 
 1. The root schema is always `type: object`.
-2. Each session declared in the file contributes exactly one property to the root object.
-3. The property name matches the **session name**.
+2. Each session containing one `schema` block contributes exactly one property to the root object.
+3. The property name matches the **session name** unless overridden by the `target` directive
 4. The property value is the compiled JSON Schema for that session (either an object
    merging all `SchemaField` entries or a single `TypeExpr`).
 5. Each such property is annotated with `x-session: <sessionName>` at the property level.
-6. The root `required` array contains all session property names (unless a session schema
-   was anonymous and marked optional).
+6. The root `required` array contains all property names derived from sessions with schemas (unless a session schema was anonymous and marked optional).
 7. The order of properties in the root schema follows the order sessions first appear in the file.
 8. If two different sessions would result in the same property name (impossible since session
    names are unique), it is a compile error.

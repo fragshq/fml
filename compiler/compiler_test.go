@@ -101,6 +101,32 @@ session("s2") { schema { f2: int } }
 	assert.Contains(t, schema.Properties, "s2")
 }
 
+func TestCompiler_SessionNoSchema(t *testing.T) {
+	input := `
+session("s1") { 
+    - prompt 1
+}
+session("s2") { 
+    schema { f2: int } 
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out.Schema)
+
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	// s1 should NOT be in the root schema because it has no schema block
+	assert.NotContains(t, schema.Properties, "s1")
+	assert.Contains(t, schema.Properties, "s2")
+
+	// s1 should NOT be in required
+	assert.NotContains(t, schema.Required, "s1")
+	assert.Contains(t, schema.Required, "s2")
+}
+
 func TestCompiler_Iteration(t *testing.T) {
 	input := `
 session("loop", iterate=context.items) {

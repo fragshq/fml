@@ -16,6 +16,7 @@ const (
 	TokenAttrValue     lexer.TokenType = -11
 	TokenCodeValue     lexer.TokenType = -12
 	TokenPrePromptItem lexer.TokenType = -13
+	TokenRawString     lexer.TokenType = -14
 )
 
 // Token Symbol Names
@@ -23,6 +24,7 @@ const (
 	SymComment       = "Comment"
 	SymInlineComment = "InlineComment"
 	SymString        = "String"
+	SymRawString     = "RawString"
 	SymNumber        = "Number"
 	SymBool          = "Bool"
 	SymIdent         = "Ident"

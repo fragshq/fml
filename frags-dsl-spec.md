@@ -60,6 +60,7 @@ INDENT(n)    = exactly n spaces of leading whitespace (tabs count as 1 space)
 BLANK_LINE   = a line containing only SP* followed by NEWLINE
 IDENTIFIER   = [a-zA-Z_][a-zA-Z0-9_-]*
 STRING_LIT   = '"' ( [^"\\] | '\\' . )* '"'   # standard JSON-style escaping
+RAW_STRING   = '`' [^`]* '`'                   # multi-line raw string
 NUMBER_LIT   = '-'? [0-9]+ ( '.' [0-9]+ )?
 BOOL_LIT     = "true" | "false"
 COMMENT      = '#' [^\n]* NEWLINE              # leading comment (whole line)
@@ -69,9 +70,10 @@ RAW_EXPR     = balanced parentheses content    # Golang Expr syntax
 ```
 
 String literals support standard escapes: `\"`, `\\`, `\n`, `\t`.
+Raw strings support newlines and do not interpret escape sequences.
 
 **Go template strings** (`{{ .params.x }}`, `{{ .vars.y }}`, `{{ .it.field }}`,
-`{{ .context.field }}`) appear inside `STRING_LIT` values and prompt lines and are passed
+`{{ .context.field }}`) appear inside `STRING_LIT` and `RAW_STRING` values and prompt lines and are passed
 through verbatim to the YAML output without interpretation by the compiler.
 
 **Expr values** are delimited by `$(` … `)`. The content is a Golang Expr expression and is
@@ -106,7 +108,7 @@ RequireStmt  ← "require" ToolType IDENTIFIER? NEWLINE
 
 # ── system ────────────────────────────────────────────────────────────────────
 
-SystemBlock  ← "system" "(" STRING_LIT ")"
+SystemBlock  ← "system" "(" (STRING_LIT / RAW_STRING) ")"
 
 # ── parameters ────────────────────────────────────────────────────────────────
 

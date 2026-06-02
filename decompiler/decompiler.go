@@ -32,7 +32,12 @@ func (d *Decompiler) Decompile() (string, error) {
 
 	if d.plan.SystemPrompt != nil {
 		d.writeBlockComment(&sb, d.plan.Comments["systemPrompt"], "")
-		sb.WriteString(fmt.Sprintf("system(%q)\n\n", d.plan.SystemPrompt.Value))
+		val := d.plan.SystemPrompt.Value
+		if strings.Contains(val, "\n") {
+			sb.WriteString(fmt.Sprintf("system(`%s`)\n\n", val))
+		} else {
+			sb.WriteString(fmt.Sprintf("system(%q)\n\n", val))
+		}
 	}
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {

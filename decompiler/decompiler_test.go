@@ -278,6 +278,42 @@ components {
 	assert.Contains(t, output, `id: string # Unique identifier`)
 }
 
+func TestDecompiler_SystemMultiline(t *testing.T) {
+	input := `system(` + "`" + `
+  Line 1
+  Line 2
+` + "`" + `)
+
+session("s") {
+    - Prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, "system(`")
+	assert.Contains(t, output, "Line 1")
+	assert.Contains(t, output, "Line 2")
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
 func TestDecompiler_SchemaBlockDescription(t *testing.T) {
 	input := `session("s") {
     schema {

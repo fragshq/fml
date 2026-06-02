@@ -28,6 +28,7 @@ func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 		SymComment:       TokenComment,
 		SymInlineComment: TokenInlineComment,
 		SymString:        TokenString,
+		SymRawString:     TokenRawString,
 		SymNumber:        TokenNumber,
 		SymBool:          TokenBool,
 		SymIdent:         TokenIdent,
@@ -131,6 +132,9 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			t = l.consumeComment(SymInlineComment)
 		case r == '"':
 			t, err = l.consumeString()
+			l.lastIdent = ""
+		case r == '`':
+			t, err = l.consumeRawString()
 			l.lastIdent = ""
 		case unicode.IsDigit(rune(r)) || r == '-' || r == '+':
 			if r == '-' {
@@ -309,6 +313,40 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 		i++
 	}
 	return lexer.Token{}, l.lexerErrorf(startPos, "unterminated string literal")
+}
+
+func (l *fragsLexer) consumeRawString() (lexer.Token, error) {
+	startPos := l.pos
+	i := 1
+	for i < len(l.s) {
+		if l.isAt(i, '`') {
+			val := l.s[:i+1]
+			// Validate template tags
+			if strings.Count(val, "{{") != strings.Count(val, "}}") {
+				return lexer.Token{}, l.lexerErrorf(startPos, "malformed template tags in raw string")
+			}
+			i++
+
+			token := lexer.Token{
+				Type:  TokenRawString,
+				Value: val,
+				Pos:   startPos,
+			}
+
+			l.s = l.s[i:]
+			for _, r := range val {
+				if r == '\n' {
+					l.pos.Line++
+					l.pos.Column = 1
+				} else {
+					l.pos.Column++
+				}
+			}
+			return token, nil
+		}
+		i++
+	}
+	return lexer.Token{}, l.lexerErrorf(startPos, "unterminated raw string literal")
 }
 
 func (l *fragsLexer) consumeNumber() (lexer.Token, error) {

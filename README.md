@@ -76,8 +76,8 @@ For more details on the language, see [frags-dsl-spec.md](frags-dsl-spec.md).
 The FML LSP is provided as a library in the `./lsp` directory. It can be integrated into Go applications to provide Language Server Protocol capabilities via Stdio, TCP, or WebSocket.
 
 Features supported:
-- Syntax Diagnostics
-- Semantic Tokens (Highlighting)
+- Syntax Diagnostics (including multi-line system prompts)
+- Semantic Tokens (Highlighting including backtick raw strings)
 - Autocompletion (Keywords, Types, Attributes)
 - Basic Hover
 

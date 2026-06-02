@@ -179,7 +179,7 @@ func componentsKeywordCompletions() []lsp.CompletionItem {
 
 func topLevelKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
-		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt."}},
+		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\") or system(`...`)", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt. Supports multi-line backticks."}},
 		{Label: "parameter", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "parameter(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an input parameter for the plan."}},
 		{Label: "transformer", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "transformer(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output transformer."}},
 		{Label: "require", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "require <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a global tool requirement for the plan."}},

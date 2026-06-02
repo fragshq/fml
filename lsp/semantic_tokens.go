@@ -34,7 +34,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 		switch t.Type {
 		case -2, -10: // Comment, InlineComment
 			tokenType = 3
-		case -3, -9, -13: // String, PromptItem, PrePromptItem
+		case -3, -14, -9, -13: // String, RawString, PromptItem, PrePromptItem
 			tokenType = 1
 		case -4: // Number
 			tokenType = 2

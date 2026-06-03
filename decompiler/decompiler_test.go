@@ -123,6 +123,37 @@ func TestDecompiler_NamespacedTargets(t *testing.T) {
 	assert.Equal(t, string(y1), string(y2))
 }
 
+func TestDecompiler_PromptWithBlankLines(t *testing.T) {
+	input := `session("s") {
+    - First
+      
+      Second
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	if err != nil {
+		t.Fatalf("Failed to parse output:\n%s\nError: %v", output, err)
+	}
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
 func TestDecompiler_TransformerParser(t *testing.T) {
 	input := `transformer("t1") {
     onFunctionOutput = "fn"
@@ -302,6 +333,49 @@ session("s") {
 	assert.Contains(t, output, "system(`")
 	assert.Contains(t, output, "Line 1")
 	assert.Contains(t, output, "Line 2")
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}
+
+func TestDecompiler_PromptIndentation(t *testing.T) {
+	input := `session("s") {
+    - foo
+      bar
+        yay
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	// Check YAML value
+	promptVal := ""
+	for i := 0; i < len(planYAML.Sessions.Content[1].Content); i += 2 {
+		if planYAML.Sessions.Content[1].Content[i].Value == "prompt" {
+			promptVal = planYAML.Sessions.Content[1].Content[i+1].Value
+		}
+	}
+	assert.Equal(t, "foo\nbar\n  yay", promptVal)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Verify indentation in FML
+	assert.Contains(t, output, "    - foo\n")
+	assert.Contains(t, output, "      bar\n")
+	assert.Contains(t, output, "        yay\n")
 
 	// Round-trip
 	plan2, err := p.ParseString("roundtrip.frags", output)

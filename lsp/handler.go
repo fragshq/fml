@@ -94,9 +94,6 @@ func (h *FMLHandler) OnTypeFormatting(ctx context.Context, params *lsp.DocumentO
 
 	prevLine := lines[params.Position.Line-1]
 	trimmedPrev := strings.TrimSpace(prevLine)
-	if trimmedPrev == "" {
-		return nil, nil
-	}
 
 	// Calculate base indentation of previous line
 	indent := ""
@@ -121,6 +118,19 @@ func (h *FMLHandler) OnTypeFormatting(ctx context.Context, params *lsp.DocumentO
 		} else {
 			newIndent += "\t"
 		}
+	} else if (strings.HasPrefix(trimmedPrev, "+") || strings.HasPrefix(trimmedPrev, "-")) && len(trimmedPrev) > 1 {
+		// Prompt continuation indentation: must be strictly deeper than marker.
+		// We add 2 spaces to the base indent of the marker line.
+		// ONLY if the marker line actually has some text after the marker.
+		newIndent += "  "
+	} else if trimmedPrev == "" {
+		// If previous line was blank, check if we are in a prompt continuation
+		if mCol, ok := h.getActivePromptMarker(lines, params.Position.Line-1); ok {
+			// Ensure we have at least marker indent + 2
+			if len(newIndent) <= mCol {
+				newIndent = strings.Repeat(" ", mCol+2)
+			}
+		}
 	}
 
 	return []lsp.TextEdit{
@@ -132,6 +142,51 @@ func (h *FMLHandler) OnTypeFormatting(ctx context.Context, params *lsp.DocumentO
 			NewText: newIndent,
 		},
 	}, nil
+}
+
+func (h *FMLHandler) getActivePromptMarker(lines []string, lineNum int) (int, bool) {
+	if lineNum < 0 || lineNum >= len(lines) {
+		return 0, false
+	}
+
+	for i := lineNum; i >= 0; i-- {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// Find this line's indent
+		indent := 0
+		for _, r := range line {
+			if r == ' ' || r == '\t' {
+				indent++
+			} else {
+				break
+			}
+		}
+
+		if strings.HasPrefix(trimmed, "+") || strings.HasPrefix(trimmed, "-") {
+			// Find marker column
+			markerCol := 0
+			for j, r := range line {
+				if r == '+' || r == '-' {
+					markerCol = j
+					break
+				}
+			}
+			return markerCol, true
+		}
+
+		// It's a non-blank, non-prompt line.
+		// Check if this line itself is a continuation of some prompt above it.
+		mCol, ok := h.getActivePromptMarker(lines, i-1)
+		if ok && indent > mCol {
+			return mCol, true
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 func (h *FMLHandler) diagnose(ctx context.Context, uri lsp.DocumentURI, text string) {

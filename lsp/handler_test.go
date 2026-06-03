@@ -151,6 +151,18 @@ func TestFMLHandler_Completion_ContextAwareness(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, respPrePromptSpace.Items, "Should have no completions after '+ '")
 
+	// 2b. Completion on blank line inside prompt
+	handler.documents[uri] = "session(\"s\") {\n  - foo\n    \n}"
+	paramsBlankInPrompt := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 2, Character: 4}, // on indented blank line
+		},
+	}
+	respBlankInPrompt, err := handler.Completion(context.Background(), paramsBlankInPrompt)
+	assert.NoError(t, err)
+	assert.Empty(t, respBlankInPrompt.Items, "Should have no completions on blank line in prompt")
+
 	// 3. Completion inside a prompt
 	handler.documents[uri] = "# comment\n  + pre-prompt\n  - prompt\n"
 	paramsPrompt := &lsp.CompletionParams{

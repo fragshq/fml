@@ -38,6 +38,38 @@ func TestFMLHandler_OnTypeFormatting(t *testing.T) {
 			},
 		},
 		{
+			name:    "indent for prompt continuation",
+			content: "session(\"s\") {\n  - foo\n",
+			line:    2,
+			char:    0,
+			ch:      "\n",
+			expected: []lsp.TextEdit{
+				{
+					Range: lsp.Range{
+						Start: lsp.Position{Line: 2, Character: 0},
+						End:   lsp.Position{Line: 2, Character: 0},
+					},
+					NewText: "    ", // 2 spaces (base) + 2 spaces (continuation)
+				},
+			},
+		},
+		{
+			name:    "indent after blank line in prompt",
+			content: "session(\"s\") {\n  - foo\n    \n",
+			line:    3,
+			char:    0,
+			ch:      "\n",
+			expected: []lsp.TextEdit{
+				{
+					Range: lsp.Range{
+						Start: lsp.Position{Line: 3, Character: 0},
+						End:   lsp.Position{Line: 3, Character: 0},
+					},
+					NewText: "    ",
+				},
+			},
+		},
+		{
 			name:    "no extra indent after prompt marker - (preserve level for new items)",
 			content: "session(\"s\") {\n  -\n",
 			line:    2,

@@ -411,13 +411,16 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 			k++
 		}
 
-		if j+k < len(l.s) && !l.isNewline(j+k) && k > dashCol {
-			j += k
-			for j < len(l.s) && !l.isNewline(j) {
-				j++
+		if j+k < len(l.s) {
+			if l.isNewline(j+k) || k > dashCol {
+				// Either a blank line or an indented content line
+				j += k
+				for j < len(l.s) && !l.isNewline(j) {
+					j++
+				}
+				totalLen = j
+				continue
 			}
-			totalLen = j
-			continue
 		}
 		break
 	}

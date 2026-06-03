@@ -30,7 +30,7 @@ type RequireStmt struct {
 }
 
 type SystemBlock struct {
-	Value         string  `"system" "(" @String ")"`
+	Value         string  `"system" "(" (@String | @RawString) ")"`
 	InlineComment *string `@InlineComment?`
 }
 
@@ -226,7 +226,7 @@ type ObjectBody struct {
 func NewParser() (*participle.Parser[Plan], error) {
 	return participle.Build[Plan](
 		participle.Lexer(&FRAGSLexerDefinition{}),
-		participle.Unquote("String"),
+		participle.Unquote("String", "RawString"),
 		participle.UseLookahead(10),
 	)
 }

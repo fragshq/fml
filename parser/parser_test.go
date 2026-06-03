@@ -28,6 +28,22 @@ session("gather") {
 	assert.Equal(t, "gather", plan.Statements[2].Session.Name)
 }
 
+func TestParser_SystemMultiline(t *testing.T) {
+	p, err := NewParser()
+	assert.NoError(t, err)
+
+	input := `
+system(` + "`" + `
+  Line 1
+  Line 2
+` + "`" + `)
+`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	assert.Contains(t, plan.Statements[0].System.Value, "Line 1")
+	assert.Contains(t, plan.Statements[0].System.Value, "Line 2")
+}
+
 func TestParser_AnonymousSchema(t *testing.T) {
 	p, _ := NewParser()
 	input := `session("it") { schema string[] }`

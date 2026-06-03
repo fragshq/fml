@@ -32,7 +32,12 @@ func (d *Decompiler) Decompile() (string, error) {
 
 	if d.plan.SystemPrompt != nil {
 		d.writeBlockComment(&sb, d.plan.Comments["systemPrompt"], "")
-		sb.WriteString(fmt.Sprintf("system(%q)\n\n", d.plan.SystemPrompt.Value))
+		val := d.plan.SystemPrompt.Value
+		if strings.Contains(val, "\n") {
+			sb.WriteString(fmt.Sprintf("system(`%s`)\n\n", val))
+		} else {
+			sb.WriteString(fmt.Sprintf("system(%q)\n\n", val))
+		}
 	}
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {
@@ -552,9 +557,18 @@ func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix st
 	if len(lines) == 0 {
 		return
 	}
-	sb.WriteString(fmt.Sprintf("    %s %s\n", prefix, strings.TrimSpace(lines[0])))
+	// First line is at base session indent (4 spaces) + marker + space
+	sb.WriteString(fmt.Sprintf("    %s %s\n", prefix, strings.TrimRight(lines[0], " \t")))
+
+	// Continuation lines must be indented strictly deeper than the marker's column.
+	// The marker is at column 4, so continuation lines must start at column 5 or deeper.
+	// We use column 6 (6 spaces) as base for continuation lines to be safe.
 	for _, line := range lines[1:] {
-		sb.WriteString(fmt.Sprintf("      %s\n", strings.TrimSpace(line)))
+		if strings.TrimSpace(line) == "" {
+			sb.WriteString("\n")
+		} else {
+			sb.WriteString(fmt.Sprintf("      %s\n", strings.TrimRight(line, " \t")))
+		}
 	}
 }
 

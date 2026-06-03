@@ -3,10 +3,10 @@
 This is a Language Server Protocol (LSP) library for the Frags DSL (FML). It can be integrated into other Go applications to provide LSP capabilities.
 
 ## Features
-- **Real-time Diagnostics**: Reports syntax errors as you type.
+- **Real-time Diagnostics**: Reports syntax errors as you type, supporting multi-line system prompts.
 - **Hover Support**: Basic hover capability.
-- **Semantic Tokens**: Syntax highlighting support.
-- **Completions**: Smart completion suggestions.
+- **Semantic Tokens**: Advanced syntax highlighting, including multi-line backtick strings.
+- **Completions**: Smart completion suggestions for keywords, attributes, and types.
 
 ## Usage
 

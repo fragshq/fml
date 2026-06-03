@@ -151,6 +151,18 @@ func TestFMLHandler_Completion_ContextAwareness(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, respPrePromptSpace.Items, "Should have no completions after '+ '")
 
+	// 2b. Completion on blank line inside prompt
+	handler.documents[uri] = "session(\"s\") {\n  - foo\n    \n}"
+	paramsBlankInPrompt := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 2, Character: 4}, // on indented blank line
+		},
+	}
+	respBlankInPrompt, err := handler.Completion(context.Background(), paramsBlankInPrompt)
+	assert.NoError(t, err)
+	assert.Empty(t, respBlankInPrompt.Items, "Should have no completions on blank line in prompt")
+
 	// 3. Completion inside a prompt
 	handler.documents[uri] = "# comment\n  + pre-prompt\n  - prompt\n"
 	paramsPrompt := &lsp.CompletionParams{
@@ -321,11 +333,19 @@ func TestFMLHandler_Hover(t *testing.T) {
 }
 
 func TestFMLHandler_SemanticTokens(t *testing.T) {
-	handler := &FMLHandler{}
-	uri := lsp.DocumentURI("file:///test.fml")
-	handler.documents = map[lsp.DocumentURI]string{
-		uri: "system(\"test\")",
+	handler := &FMLHandler{
+		documents: make(map[lsp.DocumentURI]string),
 	}
+	uri := lsp.DocumentURI("file:///test.fml")
+
+	// FML with a multi-line prompt and an em-dash (—).
+	// The continuation line is indented by 4 spaces and has an em-dash.
+	// Em-dash is 3 bytes in UTF-8, but 1 code unit in UTF-16.
+	fml := `session("s") {
+  - First line — with dash
+    Continuation — line
+}`
+	handler.documents[uri] = fml
 
 	params := &lsp.SemanticTokensParams{
 		TextDocument: lsp.TextDocumentIdentifier{URI: uri},
@@ -333,6 +353,32 @@ func TestFMLHandler_SemanticTokens(t *testing.T) {
 
 	resp, err := handler.SemanticTokensFull(context.Background(), params)
 	require.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.NotEmpty(t, resp.Data)
+	require.NotNil(t, resp)
+
+	data := resp.Data
+
+	foundPromptStart := false
+	foundContinuation := false
+
+	for i := 0; i < len(data); i += 5 {
+		deltaLine := data[i]
+		deltaChar := data[i+1]
+		length := data[i+2]
+		tokenType := data[i+3]
+
+		// Token type 1 is "string" which is used for prompts in the current implementation
+		if tokenType == 1 {
+			// Check for first line of prompt (Line 1, Col 0 "- First line — with dash")
+			if deltaLine == 1 && deltaChar == 0 && length >= 24 {
+				foundPromptStart = true
+			}
+			// Check for continuation line (Line 2, Col 0 "    Continuation — line")
+			if deltaLine == 1 && deltaChar == 0 && length >= 23 {
+				foundContinuation = true
+			}
+		}
+	}
+
+	assert.True(t, foundPromptStart, "Should find the first line of the prompt at correct offset")
+	assert.True(t, foundContinuation, "Should find the continuation line of the prompt at correct offset (indented)")
 }

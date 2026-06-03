@@ -739,8 +739,15 @@ func (c *Compiler) cleanPromptItem(s string) string {
 	if len(lines) == 0 {
 		return ""
 	}
+
 	first := lines[0]
-	// Handle both + and - prefixes
+	// Calculate the indentation level of the marker
+	markerCol := 0
+	for markerCol < len(first) && (first[markerCol] == ' ' || first[markerCol] == '\t') {
+		markerCol++
+	}
+
+	// Extract content from the first line after marker (+ or -)
 	i := strings.IndexAny(first, "+-")
 	if i != -1 {
 		if i+1 < len(first) && first[i+1] == ' ' {
@@ -749,23 +756,45 @@ func (c *Compiler) cleanPromptItem(s string) string {
 			first = first[i+1:]
 		}
 	}
+
 	var result []string
 	result = append(result, strings.TrimRight(first, " \t"))
+
 	if len(lines) > 1 {
-		fullFirst := lines[0]
-		indent := 0
-		for indent < len(fullFirst) && (fullFirst[indent] == ' ' || fullFirst[indent] == '\t') {
-			indent++
-		}
-		stripLen := indent + 1
+		// Continuation lines must be indented strictly deeper than markerCol.
+		// We want to find the common minimal indentation among non-empty continuation lines.
+		commonIndent := -1
 		for _, line := range lines[1:] {
-			if len(line) > stripLen {
-				result = append(result, strings.TrimRight(line[stripLen:], " \t"))
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			indent := 0
+			for indent < len(line) && (line[indent] == ' ' || line[indent] == '\t') {
+				indent++
+			}
+			if commonIndent == -1 || indent < commonIndent {
+				commonIndent = indent
+			}
+		}
+
+		// If no non-empty continuation lines, we just treat them as empty.
+		if commonIndent == -1 {
+			commonIndent = 0
+		}
+
+		for _, line := range lines[1:] {
+			if len(line) > commonIndent {
+				result = append(result, strings.TrimRight(line[commonIndent:], " \t"))
 			} else {
 				result = append(result, "")
 			}
 		}
 	}
+
+	// Join and trim ONLY trailing/leading whitespace of the whole block if needed,
+	// but the user wants to preserve line structure.
+	// Actually, strings.TrimSpace on the result might be too aggressive if leading/trailing newlines are intended.
+	// But usually, prompts are cleaned up.
 	return strings.TrimSpace(strings.Join(result, "\n"))
 }
 

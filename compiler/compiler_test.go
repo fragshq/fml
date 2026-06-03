@@ -602,3 +602,76 @@ session("s") {
 	assert.Equal(t, "vars", r3.In)
 	assert.Equal(t, "myConfig", r3.Var)
 }
+
+func TestCompiler_MultilinePromptIndentation(t *testing.T) {
+	input := `
+session("s") {
+  - foo
+    bar
+      yay
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	sessNode := out.Sessions.Content[1]
+	var prompt *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "prompt" {
+			prompt = sessNode.Content[i+1]
+		}
+	}
+
+	require.NotNil(t, prompt)
+	// Expected: "foo\nbar\n  yay"
+	// Wait, let's trace:
+	// "- foo" -> line starts with "-" at column 2. indent=2.
+	// text after "- " is "foo"
+	// "    bar" -> column 4. stripLen = indent + 1 = 3. line[3:] = " bar"
+	// "      yay" -> column 6. line[3:] = "   yay"
+	// So current logic produces "foo\n bar\n   yay"?
+	// Let's see what the user says: "+ foo\n   bar\n    yay" -> "foo\nbar\nyay" (lost)
+	assert.Equal(t, "foo\nbar\n  yay", prompt.Value)
+}
+
+func TestCompiler_PromptWithBlankLine(t *testing.T) {
+	input := `
+session("s") {
+  - First line
+    
+    Second line
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	sessNode := out.Sessions.Content[1]
+	var prompt *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "prompt" {
+			prompt = sessNode.Content[i+1]
+		}
+	}
+
+	require.NotNil(t, prompt)
+	// Currently this might fail or produce only "First line"
+	assert.Contains(t, prompt.Value, "First line")
+	assert.Contains(t, prompt.Value, "Second line")
+}
+
+func TestCompiler_PromptWithTrulyBlankLine(t *testing.T) {
+	input := "session(\"s\") {\n  - First\n\n    Second\n}\n"
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+
+	sessNode := out.Sessions.Content[1]
+	var prompt *yaml.Node
+	for i := 0; i < len(sessNode.Content); i += 2 {
+		if sessNode.Content[i].Value == "prompt" {
+			prompt = sessNode.Content[i+1]
+		}
+	}
+
+	require.NotNil(t, prompt)
+	assert.Equal(t, "First\n\nSecond", prompt.Value)
+}

@@ -179,7 +179,7 @@ func componentsKeywordCompletions() []lsp.CompletionItem {
 
 func topLevelKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
-		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt."}},
+		{Label: "system", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "system(\"...\") or system(`...`)", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Sets the global system prompt. Supports multi-line backticks."}},
 		{Label: "parameter", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "parameter(\"...\")", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines an input parameter for the plan."}},
 		{Label: "transformer", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "transformer(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output transformer."}},
 		{Label: "require", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "require <type> <name>", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Declares a global tool requirement for the plan."}},
@@ -190,7 +190,7 @@ func topLevelKeywordCompletions() []lsp.CompletionItem {
 }
 
 func (h *FMLHandler) isInPromptContinuation(lines []string, lineNum int) bool {
-	if lineNum <= 0 {
+	if lineNum < 0 || lineNum >= len(lines) {
 		return false
 	}
 
@@ -205,46 +205,21 @@ func (h *FMLHandler) isInPromptContinuation(lines []string, lineNum int) bool {
 		}
 	}
 
-	for i := lineNum - 1; i >= 0; i-- {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
+	// If current line is blank, we use a virtual indent that would satisfy continuation
+	// if we are indeed inside a prompt. getActivePromptMarker will tell us.
+	trimmed := strings.TrimSpace(currentLine)
+	isCurrentBlank := trimmed == ""
 
-		// If we find a prompt marker line
-		if strings.HasPrefix(trimmed, "+") || strings.HasPrefix(trimmed, "-") {
-			markerIndent := 0
-			for j, r := range line {
-				if r == '+' || r == '-' {
-					markerIndent = j
-					break
-				}
-			}
-
-			// A continuation line must be indented deeper than the column of
-			// the "+" or "-" that opened the item.
-			if currentIndent > markerIndent {
-				return true
-			}
-			return false
-		}
-
-		// If we encounter a line that starts at a shallower indentation than current line
-		// and is not empty, it might be the end of the block.
-		lineIndent := 0
-		for _, r := range line {
-			if r == ' ' || r == '\t' {
-				lineIndent++
-			} else {
-				break
-			}
-		}
-		if lineIndent < currentIndent {
-			return false
-		}
+	mCol, ok := h.getActivePromptMarker(lines, lineNum-1)
+	if !ok {
+		return false
 	}
-	return false
+
+	if isCurrentBlank {
+		return true
+	}
+
+	return currentIndent > mCol
 }
 
 func (h *FMLHandler) findBlockType(lines []string, lineNum int) string {

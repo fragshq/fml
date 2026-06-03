@@ -1,0 +1,29 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.4'
+      - name: Build
+        run: |
+          mkdir target
+          GOOS=linux GOARCH=amd64 go build -o target/fml-linux -v .
+          GOOS=windows GOARCH=amd64 go build -o target/fml.exe -v .
+          GOOS=darwin GOARCH=amd64 go build -o target/fml-darwin-amd64 -v .
+          GOOS=darwin GOARCH=arm64 go build -o target/fml-darwin-arm64 -v .
+      - name: GitHub Releases
+        uses: fnkr/github-action-ghr@v1.3
+        env:
+          GHR_PATH: target/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -25,6 +25,7 @@ func (d *FRAGSLexerDefinition) Lex(filename string, r io.Reader) (lexer.Lexer, e
 
 func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 	return map[string]lexer.TokenType{
+		SymEOF:           TokenEOF,
 		SymComment:       TokenComment,
 		SymInlineComment: TokenInlineComment,
 		SymString:        TokenString,
@@ -38,26 +39,34 @@ func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 		SymPrePromptItem: TokenPrePromptItem,
 		SymAttrValue:     TokenAttrValue,
 		SymCodeValue:     TokenCodeValue,
-		SymEOF:           TokenEOF,
 	}
 }
 
-// fragsLexer is a stateful lexer that handles indentation-sensitive prompt blocks,
-// balanced-parentheses code segments, and robust error detection.
 type fragsLexer struct {
 	s                  string
 	pos                lexer.Position
+	lastIdent          string
 	expectingAttrValue bool
 	expectingCode      bool
-	lastIdent          string
 }
 
-func (l *fragsLexer) lexerErrorf(pos lexer.Position, format string, args ...interface{}) error {
-	return &LexerError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
+func (l *fragsLexer) updatePos(val string) {
+	for _, r := range val {
+		if r == '\n' {
+			l.pos.Line++
+			l.pos.Column = 1
+		} else {
+			l.pos.Column++
+		}
+	}
 }
 
 func (l *fragsLexer) Next() (lexer.Token, error) {
 	for {
+		if len(l.s) == 0 {
+			return lexer.Token{Type: TokenEOF, Pos: l.pos}, nil
+		}
+
 		if l.pos.Column == 1 {
 			i := 0
 			for l.isSpace(i) {
@@ -70,30 +79,16 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				t, err := l.consumePromptItem(i, isPrePrompt)
 				return t, err
 			}
-
-			if l.isAt(i, '#') {
-				l.s = l.s[i:]
-				l.pos.Column += i
-				return l.consumeComment(SymComment), nil
-			}
-		}
-
-		i := 0
-		for l.isSpace(i) {
-			i++
-		}
-		if i > 0 {
-			l.s = l.s[i:]
-			l.pos.Column += i
-		}
-
-		if len(l.s) == 0 {
-			return lexer.EOFToken(l.pos), nil
 		}
 
 		if l.isNewline(0) {
 			l.consumeNewline()
 			l.lastIdent = ""
+			continue
+		}
+
+		if unicode.IsSpace(rune(l.s[0])) {
+			l.consume(1, SymWhitespace)
 			continue
 		}
 		break
@@ -129,7 +124,13 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		r := l.s[0]
 		switch {
 		case r == '#':
-			t = l.consumeComment(SymInlineComment)
+			// Heuristic: If it starts at column 1 (after whitespace skipping), it's a block Comment.
+			// Otherwise, it's an InlineComment.
+			typ := SymInlineComment
+			if l.pos.Column == 1 {
+				typ = SymComment
+			}
+			t = l.consumeComment(typ)
 		case r == '"':
 			t, err = l.consumeString()
 			l.lastIdent = ""
@@ -207,14 +208,7 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 
 	val := l.s[:i]
 	l.s = l.s[i:]
-	for _, r := range val {
-		if r == '\n' {
-			l.pos.Line++
-			l.pos.Column = 1
-		} else {
-			l.pos.Column++
-		}
-	}
+	l.updatePos(val)
 
 	return lexer.Token{
 		Type:  TokenPunct,
@@ -224,13 +218,13 @@ func (l *fragsLexer) consumeBalanced(start, end rune) (lexer.Token, error) {
 }
 
 func (l *fragsLexer) consumeNewline() {
+	n := 1
 	if strings.HasPrefix(l.s, "\r\n") {
-		l.s = l.s[2:]
-	} else {
-		l.s = l.s[1:]
+		n = 2
 	}
-	l.pos.Line++
-	l.pos.Column = 1
+	val := l.s[:n]
+	l.s = l.s[n:]
+	l.updatePos(val)
 }
 
 func (l *fragsLexer) consume(n int, typ string) lexer.Token {
@@ -241,7 +235,7 @@ func (l *fragsLexer) consume(n int, typ string) lexer.Token {
 		Pos:   l.pos,
 	}
 	l.s = l.s[n:]
-	l.pos.Column += n
+	l.updatePos(val)
 	return token
 }
 
@@ -302,13 +296,20 @@ func (l *fragsLexer) consumeString() (lexer.Token, error) {
 			continue
 		}
 		if l.isAt(i, '"') {
-			val := l.s[:i+1]
+			i++
+			val := l.s[:i]
 			// Validate template tags {{ }} are balanced
 			if strings.Count(val, "{{") != strings.Count(val, "}}") {
 				return lexer.Token{}, l.lexerErrorf(startPos, "malformed template tags in string")
 			}
-			i++
-			return l.consume(i, SymString), nil
+			token := lexer.Token{
+				Type:  TokenString,
+				Value: val,
+				Pos:   startPos,
+			}
+			l.s = l.s[i:]
+			l.updatePos(val)
+			return token, nil
 		}
 		i++
 	}
@@ -320,13 +321,12 @@ func (l *fragsLexer) consumeRawString() (lexer.Token, error) {
 	i := 1
 	for i < len(l.s) {
 		if l.isAt(i, '`') {
-			val := l.s[:i+1]
+			i++
+			val := l.s[:i]
 			// Validate template tags
 			if strings.Count(val, "{{") != strings.Count(val, "}}") {
 				return lexer.Token{}, l.lexerErrorf(startPos, "malformed template tags in raw string")
 			}
-			i++
-
 			token := lexer.Token{
 				Type:  TokenRawString,
 				Value: val,
@@ -334,41 +334,12 @@ func (l *fragsLexer) consumeRawString() (lexer.Token, error) {
 			}
 
 			l.s = l.s[i:]
-			for _, r := range val {
-				if r == '\n' {
-					l.pos.Line++
-					l.pos.Column = 1
-				} else {
-					l.pos.Column++
-				}
-			}
+			l.updatePos(val)
 			return token, nil
 		}
 		i++
 	}
 	return lexer.Token{}, l.lexerErrorf(startPos, "unterminated raw string literal")
-}
-
-func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
-	startPos := l.pos
-	i := 0
-	if l.isAt(i, '-') || l.isAt(i, '+') {
-		i++
-	}
-	dots := 0
-	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.isAt(i, '.')) {
-		if l.isAt(i, '.') {
-			dots++
-			if dots > 1 {
-				return lexer.Token{}, l.lexerErrorf(startPos, "malformed number (multiple decimal points)")
-			}
-		}
-		i++
-	}
-	if l.isAt(i-1, '.') {
-		return lexer.Token{}, l.lexerErrorf(startPos, "malformed number (trailing decimal point)")
-	}
-	return l.consume(i, SymNumber), nil
 }
 
 func (l *fragsLexer) consumeIdent() lexer.Token {
@@ -381,6 +352,31 @@ func (l *fragsLexer) consumeIdent() lexer.Token {
 		return l.consume(i, SymBool)
 	}
 	return l.consume(i, SymIdent)
+}
+
+func (l *fragsLexer) consumeNumber() (lexer.Token, error) {
+	startPos := l.pos
+	i := 0
+	if l.isAt(0, '-') || l.isAt(0, '+') {
+		i++
+	}
+
+	hasDot := false
+	for i < len(l.s) && (unicode.IsDigit(rune(l.s[i])) || l.s[i] == '.') {
+		if l.s[i] == '.' {
+			if hasDot {
+				return lexer.Token{}, l.lexerErrorf(startPos, "multiple decimal points in number")
+			}
+			hasDot = true
+		}
+		i++
+	}
+
+	if hasDot && l.s[i-1] == '.' {
+		return lexer.Token{}, l.lexerErrorf(startPos, "trailing decimal point in number")
+	}
+
+	return l.consume(i, SymNumber), nil
 }
 
 func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Token, error) {
@@ -443,14 +439,14 @@ func (l *fragsLexer) consumePromptItem(indent int, isPrePrompt bool) (lexer.Toke
 	}
 
 	l.s = l.s[totalLen:]
-	for _, r := range val {
-		if r == '\n' {
-			l.pos.Line++
-			l.pos.Column = 1
-		} else {
-			l.pos.Column++
-		}
-	}
+	l.updatePos(val)
 
 	return token, nil
+}
+
+func (l *fragsLexer) lexerErrorf(pos lexer.Position, format string, args ...interface{}) error {
+	return &LexerError{
+		Pos: pos,
+		Msg: fmt.Sprintf(format, args...),
+	}
 }

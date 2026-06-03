@@ -3,10 +3,18 @@ package lsp
 import (
 	"context"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/theirish81/fml/parser"
 )
+
+type semanticToken struct {
+	line      int
+	char      int
+	length    int
+	tokenType int
+}
 
 func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.SemanticTokensParams) (*lsp.SemanticTokens, error) {
 	text, ok := h.documents[params.TextDocument.URI]
@@ -20,9 +28,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 		return nil, nil
 	}
 
-	data := make([]int, 0)
-	lastLine := 0
-	lastChar := 0
+	var tokens []semanticToken
 
 	for {
 		t, err := l.Next()
@@ -51,36 +57,52 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 		}
 
 		if tokenType != -1 {
+			// Split multi-line tokens into absolute single-line tokens
 			lines := strings.Split(t.Value, "\n")
 			for i, lineText := range lines {
-				length := len(strings.TrimRight(lineText, "\r"))
-				if length == 0 {
-					continue
-				}
+				trimmedLine := strings.TrimRight(lineText, "\r")
+				u16 := utf16.Encode([]rune(trimmedLine))
+				length := len(u16)
 
-				dLine := 0
-				dChar := 0
-				if i == 0 {
-					dLine = (t.Pos.Line + i - 1) - lastLine
-					if dLine == 0 {
-						dChar = (t.Pos.Column - 1) - lastChar
+				if length > 0 {
+					absLine := t.Pos.Line + i - 1
+					absChar := 0
+					if i == 0 {
+						// For the first line, the column comes from the lexer.
+						// BUT we must account for any multi-byte characters BEFORE the token on the same line?
+						// No, the lexer's Pos.Column is now correct (rune-based).
+						absChar = t.Pos.Column - 1
 					} else {
-						dChar = t.Pos.Column - 1
+						// Continuation lines start at column 0 in the token value
+						absChar = 0
 					}
-				} else {
-					dLine = 1
-					dChar = 0 // Start from column 1 for continuation lines
-				}
 
-				data = append(data, dLine, dChar, length, tokenType, 0)
-				lastLine += dLine
-				if dLine == 0 {
-					lastChar += dChar
-				} else {
-					lastChar = dChar
+					tokens = append(tokens, semanticToken{
+						line:      absLine,
+						char:      absChar,
+						length:    length,
+						tokenType: tokenType,
+					})
 				}
 			}
 		}
+	}
+
+	// Convert absolute tokens to relative data
+	data := make([]int, 0, len(tokens)*5)
+	lastLine := 0
+	lastChar := 0
+
+	for _, t := range tokens {
+		dLine := t.line - lastLine
+		dChar := t.char
+		if dLine == 0 {
+			dChar = t.char - lastChar
+		}
+
+		data = append(data, dLine, dChar, t.length, t.tokenType, 0)
+		lastLine = t.line
+		lastChar = t.char
 	}
 
 	return &lsp.SemanticTokens{

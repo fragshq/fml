@@ -30,6 +30,9 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 	if strings.HasPrefix(trimmedPrefix, "#") {
 		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
+	if trimmedPrefix == "set" || strings.HasPrefix(trimmedPrefix, "set ") || strings.HasPrefix(trimmedPrefix, "set\t") {
+		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+	}
 	if (strings.HasPrefix(trimmedPrefix, "+") || strings.HasPrefix(trimmedPrefix, "-")) && (len(trimmedPrefix) > 1 || strings.HasSuffix(prefix, " ")) {
 		return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
@@ -46,8 +49,24 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 		return &lsp.CompletionList{Items: toolTypeCompletions()}, nil
 	}
 
-	// 2. Types after ":"
+	// 1.1 Namespaces after "->"
+	if strings.HasSuffix(trimmedPrefix, "->") || strings.HasSuffix(trimmedPrefix, "-> ") {
+		return &lsp.CompletionList{Items: namespaceCompletions()}, nil
+	}
+
+	// 2. Types after ":" (but not if it's a namespace prefix like vars:)
 	if strings.HasSuffix(trimmedPrefix, ":") || strings.HasSuffix(trimmedPrefix, ": ") {
+		// Check if the colon is preceded by a namespace
+		isNS := false
+		for _, ns := range []string{"vars:", "db:", "ai:", "context:"} {
+			if strings.HasSuffix(trimmedPrefix, ns) || strings.HasSuffix(trimmedPrefix, ns+" ") {
+				isNS = true
+				break
+			}
+		}
+		if isNS {
+			return &lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+		}
 		return &lsp.CompletionList{Items: scalarTypeCompletions()}, nil
 	}
 
@@ -100,6 +119,15 @@ func toolTypeCompletions() []lsp.CompletionItem {
 		{Label: "collection", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 		{Label: "function", Kind: ptr(lsp.CompletionItemKindEnumMember)},
 		{Label: "search", Kind: ptr(lsp.CompletionItemKindEnumMember)},
+	}
+}
+
+func namespaceCompletions() []lsp.CompletionItem {
+	return []lsp.CompletionItem{
+		{Label: "vars", Kind: ptr(lsp.CompletionItemKindModule)},
+		{Label: "db", Kind: ptr(lsp.CompletionItemKindModule)},
+		{Label: "ai", Kind: ptr(lsp.CompletionItemKindModule)},
+		{Label: "context", Kind: ptr(lsp.CompletionItemKindModule)},
 	}
 }
 

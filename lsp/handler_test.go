@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/owenrumney/go-lsp/lsp"
@@ -381,4 +382,123 @@ func TestFMLHandler_SemanticTokens(t *testing.T) {
 
 	assert.True(t, foundPromptStart, "Should find the first line of the prompt at correct offset")
 	assert.True(t, foundContinuation, "Should find the continuation line of the prompt at correct offset (indented)")
+}
+
+func TestFMLHandler_Bug_IndirectionCompletions(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+
+	// Case 1: call("foo") -> |
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: "session(\"s\") {\n  call(\"foo\") -> \n}",
+	}
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 1, Character: 17}, // after "-> "
+		},
+	}
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+
+	expectedNamespaces := map[string]bool{"vars": true, "db": true, "ai": true, "context": true}
+	foundNamespaces := make(map[string]bool)
+	for _, item := range resp.Items {
+		foundNamespaces[item.Label] = true
+	}
+
+	for ns := range expectedNamespaces {
+		assert.True(t, foundNamespaces[ns], "Should suggest '%s' after '->' in call", ns)
+	}
+	assert.Equal(t, len(expectedNamespaces), len(resp.Items), "Should only suggest valid namespaces")
+
+	// Case 2: resource "foo" -> |
+	handler.documents[uri] = "session(\"s\") {\n  resource \"foo\" -> \n}"
+	params.Position.Character = 20 // after "resource \"foo\" -> "
+	resp, err = handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+
+	foundNamespaces = make(map[string]bool)
+	for _, item := range resp.Items {
+		foundNamespaces[item.Label] = true
+	}
+
+	for ns := range expectedNamespaces {
+		assert.True(t, foundNamespaces[ns], "Should suggest '%s' after '->' in resource", ns)
+	}
+	assert.Equal(t, len(expectedNamespaces), len(resp.Items), "Should only suggest valid namespaces")
+}
+
+func TestFMLHandler_Bug_IndirectionHighlighting(t *testing.T) {
+	handler := &FMLHandler{
+		documents: make(map[lsp.DocumentURI]string),
+	}
+	uri := lsp.DocumentURI("file:///test.fml")
+
+	fml := "session(\"s\") {\n  call(\"foo\") -> vars:myVar\n}"
+	handler.documents[uri] = fml
+
+	params := &lsp.SemanticTokensParams{
+		TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+	}
+
+	resp, err := handler.SemanticTokensFull(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	data := resp.Data
+	foundVars := false
+
+	// semanticKeywords["vars"] is tokenType 0 (keyword)
+	currentLine := 0
+	currentChar := 0
+	for i := 0; i < len(data); i += 5 {
+		currentLine += data[i]
+		if data[i] == 0 {
+			currentChar += data[i+1]
+		} else {
+			currentChar = data[i+1]
+		}
+
+		tokenType := data[i+3]
+		length := data[i+2]
+
+		if currentLine == 1 && currentChar == 17 && length == 4 && tokenType == 0 {
+			foundVars = true
+		}
+	}
+
+	assert.True(t, foundVars, "Namespace 'vars' should be highlighted as a keyword")
+}
+
+func TestFMLHandler_Bug_NoKeywordsAfterSetEquals(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+
+	testCases := []struct {
+		doc  string
+		char int
+	}{
+		{"session(\"s\") {\n  set foobar=\n}", 13},
+		{"session(\"s\") {\n  set foobar =\n}", 14},
+		{"session(\"s\") {\n  set foobar = \n}", 15},
+		{"set foobar=\n", 11},
+	}
+
+	for _, tc := range testCases {
+		handler.documents = map[lsp.DocumentURI]string{uri: tc.doc}
+		params := &lsp.CompletionParams{
+			TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+				TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+				Position:     lsp.Position{Line: 0, Character: tc.char},
+			},
+		}
+		if strings.Contains(tc.doc, "\n  ") {
+			params.Position.Line = 1
+		}
+
+		resp, err := handler.Completion(context.Background(), params)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Items, "Should NOT suggest anything for: %q at char %d", tc.doc, tc.char)
+	}
 }

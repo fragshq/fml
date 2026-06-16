@@ -243,3 +243,64 @@ system("Sys")
 		t.Error("Expected error but got nil")
 	}
 }
+
+func TestParser_MultipleComments(t *testing.T) {
+	p, err := NewParser()
+	assert.NoError(t, err)
+
+	t.Run("top level", func(t *testing.T) {
+		input := `
+# foo
+# bar
+system("Sys")
+`
+		plan, err := p.ParseString("test.frags", input)
+		assert.NoError(t, err)
+		assert.NotNil(t, plan)
+	})
+
+	t.Run("session level", func(t *testing.T) {
+		input := `
+session("gather") {
+  # foo
+  # bar
+  schema {
+    out: string
+  }
+}
+`
+		plan, err := p.ParseString("test.frags", input)
+		assert.NoError(t, err)
+		assert.NotNil(t, plan)
+	})
+
+	t.Run("schema block", func(t *testing.T) {
+		input := `
+session("gather") {
+  schema {
+    # foo
+    # bar
+    out: string
+  }
+}
+`
+		plan, err := p.ParseString("test.frags", input)
+		assert.NoError(t, err)
+		assert.NotNil(t, plan)
+	})
+
+	t.Run("components block", func(t *testing.T) {
+		input := `
+components {
+  schema("Address") {
+    # foo
+    # bar
+    street: string
+  }
+}
+`
+		plan, err := p.ParseString("test.frags", input)
+		assert.NoError(t, err)
+		assert.NotNil(t, plan)
+	})
+}

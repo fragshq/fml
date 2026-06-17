@@ -430,11 +430,13 @@ func cOrder(p *PlanYAML) []string {
 func TestCompiler_Comments(t *testing.T) {
 	input := `
 # Global var comment
+# Another global comment line
 set x = 1
 
 session("s") {
-  # Description for f1
   schema {
+    # Description line 1
+    # Description line 2
     f1: string # inline f1
   }
 }
@@ -443,7 +445,7 @@ session("s") {
 	assert.NoError(t, err)
 
 	// Check vars comment
-	assert.Contains(t, out.Vars.Content[0].HeadComment, "Global var comment")
+	assert.Contains(t, out.Vars.Content[0].HeadComment, "Global var comment\nAnother global comment line")
 
 	var schema JSONSchema
 	err = out.Schema.Decode(&schema)

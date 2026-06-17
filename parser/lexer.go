@@ -48,6 +48,7 @@ type fragsLexer struct {
 	lastIdent          string
 	expectingAttrValue bool
 	expectingCode      bool
+	hasTokensOnLine    bool
 }
 
 func (l *fragsLexer) updatePos(val string) {
@@ -68,6 +69,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		}
 
 		if l.pos.Column == 1 {
+			l.hasTokensOnLine = false
 			i := 0
 			for l.isSpace(i) {
 				i++
@@ -77,6 +79,9 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 
 			if isPrompt || isPrePrompt {
 				t, err := l.consumePromptItem(i, isPrePrompt)
+				if err == nil {
+					l.hasTokensOnLine = true
+				}
 				return t, err
 			}
 		}
@@ -104,6 +109,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			val := strings.TrimSpace(l.s[:i])
 			t := l.consume(i, SymAttrValue)
 			t.Value = val
+			l.hasTokensOnLine = true
 			return t, nil
 		}
 	}
@@ -115,6 +121,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			return t, err
 		}
 		t.Type = TokenCodeValue
+		l.hasTokensOnLine = true
 		return t, nil
 	}
 
@@ -127,7 +134,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 			// Heuristic: If it starts at column 1 (after whitespace skipping), it's a block Comment.
 			// Otherwise, it's an InlineComment.
 			typ := SymInlineComment
-			if l.pos.Column == 1 {
+			if !l.hasTokensOnLine {
 				typ = SymComment
 			}
 			t = l.consumeComment(typ)
@@ -181,6 +188,9 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		}
 	}
 
+	if err == nil && t.Type != TokenEOF {
+		l.hasTokensOnLine = true
+	}
 	return t, err
 }
 

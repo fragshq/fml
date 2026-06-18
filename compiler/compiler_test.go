@@ -677,3 +677,48 @@ func TestCompiler_PromptWithTrulyBlankLine(t *testing.T) {
 	require.NotNil(t, prompt)
 	assert.Equal(t, "First\n\nSecond", prompt.Value)
 }
+
+func TestCompiler_BooleanTypes(t *testing.T) {
+	input := `
+parameter("paramBool", type=bool)
+parameter("paramBoolean", type=boolean)
+session("gather") {
+  schema {
+    f1: bool
+    f2: boolean
+  }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out)
+
+	// Check parameter compilation
+	type Param struct {
+		Name   string     `yaml:"name"`
+		Schema JSONSchema `yaml:"schema"`
+	}
+	require.Len(t, out.Parameters.Content, 2)
+
+	var p1, p2 Param
+	err = out.Parameters.Content[0].Decode(&p1)
+	assert.NoError(t, err)
+	assert.Equal(t, "paramBool", p1.Name)
+	assert.Equal(t, "boolean", p1.Schema.Type)
+
+	err = out.Parameters.Content[1].Decode(&p2)
+	assert.NoError(t, err)
+	assert.Equal(t, "paramBoolean", p2.Name)
+	assert.Equal(t, "boolean", p2.Schema.Type)
+
+	// Check schema compilation
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	gatherSchema := schema.Properties["gather"]
+	require.NotNil(t, gatherSchema)
+	assert.Equal(t, "object", gatherSchema.Type)
+	assert.Equal(t, "boolean", gatherSchema.Properties["f1"].Type)
+	assert.Equal(t, "boolean", gatherSchema.Properties["f2"].Type)
+}

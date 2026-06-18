@@ -225,7 +225,7 @@ TypeBase     ← ObjectBody
              / EnumType
              / ScalarType
 
-ScalarType   ← "string" | "int" | "float" | "bool" | "any"
+ScalarType   ← "string" | "int" | "float" | "bool" | "boolean" | "any"
 
 ObjectBody   ← "{" (SchemaField (","? SchemaField)*)? "}"                  # inline object
 
@@ -643,7 +643,7 @@ supported:
 | `string` | scalar string |
 | `int` | integer |
 | `float` | number (floating point) |
-| `bool` | boolean |
+| `bool` \| `boolean` | boolean |
 | `any` | empty schema `{}` |
 | `T[]` | array of T |
 | `{...}[]` | array of inline object |
@@ -659,7 +659,7 @@ supported:
 | `string` | `{type: string}` |
 | `int` | `{type: integer}` |
 | `float` | `{type: number}` |
-| `bool` | `{type: boolean}` |
+| `bool` \| `boolean` | `{type: boolean}` |
 | `any` | `{}` |
 | `string[]` | `{type: array, items: {type: string}}` |
 | `{f: string}[]` | `{type: array, items: {type: object, properties: {f: {type: string}}, required: [f]}}` |

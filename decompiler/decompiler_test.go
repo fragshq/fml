@@ -721,3 +721,31 @@ session("without_schema") {
 	y2, _ := yaml.Marshal(planYAML2)
 	assert.Equal(t, string(y1), string(y2))
 }
+
+func TestDecompiler_BooleanTypes(t *testing.T) {
+	input := `parameter("p1", type=bool)
+parameter("p2", type=boolean)
+session("s") {
+    schema {
+        f1: bool
+        f2: boolean
+    }
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Since they both compile to JSON Schema "boolean", they should decompile to "bool"
+	assert.Contains(t, output, `parameter("p1", type=bool)`)
+	assert.Contains(t, output, `parameter("p2", type=bool)`)
+	assert.Contains(t, output, `f1: bool`)
+	assert.Contains(t, output, `f2: bool`)
+}

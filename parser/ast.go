@@ -212,7 +212,7 @@ type TypeExpr struct {
 }
 
 type TypeBase struct {
-	Scalar *string     `@("string" | "int" | "float" | "bool" | "any")`
+	Scalar *string     `@("string" | "int" | "float" | "bool" | "boolean" | "any")`
 	Object *ObjectBody `| @@`
 	Ref    *string     `| "$" @Ident`
 	Enum   []string    `| (@(Ident|String) ("|" @(Ident|String))* )`

@@ -304,3 +304,34 @@ components {
 		assert.NotNil(t, plan)
 	})
 }
+
+func TestParser_BooleanTypes(t *testing.T) {
+	p, _ := NewParser()
+	input := `
+parameter("paramBool", type=bool)
+parameter("paramBoolean", type=boolean)
+session("gather") {
+  schema {
+    f1: bool
+    f2: boolean
+  }
+}
+`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	assert.NotNil(t, plan)
+
+	// Check parameters
+	assert.Equal(t, "paramBool", plan.Statements[0].Parameter.Name)
+	assert.Equal(t, "bool", *plan.Statements[0].Parameter.Attributes[0].Type.Base.Scalar)
+	assert.Equal(t, "paramBoolean", plan.Statements[1].Parameter.Name)
+	assert.Equal(t, "boolean", *plan.Statements[1].Parameter.Attributes[0].Type.Base.Scalar)
+
+	// Check schema fields
+	fields := plan.Statements[2].Session.Statements[0].Schema.Type.Base.Object.Fields
+	assert.Len(t, fields, 2)
+	assert.Equal(t, "f1", fields[0].Name)
+	assert.Equal(t, "bool", *fields[0].Type.Base.Scalar)
+	assert.Equal(t, "f2", fields[1].Name)
+	assert.Equal(t, "boolean", *fields[1].Type.Base.Scalar)
+}

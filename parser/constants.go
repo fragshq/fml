@@ -49,9 +49,10 @@ const (
 
 // DSL Scalar types
 const (
-	ScalarString = "string"
-	ScalarInt    = "int"
-	ScalarFloat  = "float"
-	ScalarBool   = "bool"
-	ScalarAny    = "any"
+	ScalarString  = "string"
+	ScalarInt     = "int"
+	ScalarFloat   = "float"
+	ScalarBool    = "bool"
+	ScalarBoolean = "boolean"
+	ScalarAny     = "any"
 )

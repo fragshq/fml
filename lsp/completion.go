@@ -109,6 +109,7 @@ func scalarTypeCompletions() []lsp.CompletionItem {
 		{Label: "int", Kind: ptr(lsp.CompletionItemKindTypeParameter)},
 		{Label: "float", Kind: ptr(lsp.CompletionItemKindTypeParameter)},
 		{Label: "bool", Kind: ptr(lsp.CompletionItemKindTypeParameter)},
+		{Label: "boolean", Kind: ptr(lsp.CompletionItemKindTypeParameter)},
 		{Label: "any", Kind: ptr(lsp.CompletionItemKindTypeParameter)},
 	}
 }

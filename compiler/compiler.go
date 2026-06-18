@@ -823,6 +823,8 @@ func (c *Compiler) compileTypeBase(t *parser.TypeBase) (*JSONSchema, error) {
 			st = parser.TypeInteger
 		} else if st == parser.ScalarFloat {
 			st = parser.TypeNumber
+		} else if st == parser.ScalarBool || st == parser.ScalarBoolean {
+			st = parser.TypeBoolean
 		}
 		if st == parser.ScalarAny {
 			return &JSONSchema{}, nil

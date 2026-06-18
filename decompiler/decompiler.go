@@ -617,6 +617,8 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 		return "int", nil
 	case parser.TypeNumber:
 		return "float", nil
+	case parser.TypeBoolean:
+		return "bool", nil
 	case parser.TypeArray:
 		if s.Items != nil {
 			ft, err := d.formatType(s.Items, indent)

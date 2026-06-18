@@ -67,7 +67,7 @@ func isWordChar(c byte) bool {
 var languageDocs = map[string]string{
 	"system":      "**system(\"prompt\")**\n\nSets the global system prompt for the entire plan. This prompt provides high-level instructions to the LLM across all sessions.",
 	"parameter":   "**parameter(\"name\", ...)**\n\nDefines a named input parameter for the plan. Parameters can have a `type`, a `default` value, a `title`, and an `enum`.",
-	"type":        "**type=...**\n\nSpecifies the data type for a parameter or field. Supports `string`, `int`, `float`, `bool`, `any`, and array suffixes (e.g., `string[]`).",
+	"type":        "**type=...**\n\nSpecifies the data type for a parameter or field. Supports `string`, `int`, `float`, `bool`, `boolean`, `any`, and array suffixes (e.g., `string[]`).",
 	"enum":        "**enum=a|b|c**\n\nRestricts a parameter or field to a specific set of allowed string values.",
 	"default":     "**default=...**\n\nSpecifies the default value for a parameter if no value is provided during plan execution.",
 	"title":       "**title=\"...\"**\n\nSpecifies a human-readable title for a parameter, used for UI display or documentation generation.",

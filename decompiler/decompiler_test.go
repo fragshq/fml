@@ -749,3 +749,66 @@ session("s") {
 	assert.Contains(t, output, `f1: bool`)
 	assert.Contains(t, output, `f2: bool`)
 }
+
+func TestDecompiler_Annotations(t *testing.T) {
+	input := `# @x-ui-layout = dashboard
+# @x-ui-theme = dark
+
+system("precise assistant")
+
+# @x-ui-component = Input
+# @x-ui-settings = {
+#   placeholder = "Enter topic"
+# }
+# Regular description
+parameter("topic", type=string)
+
+components {
+    # @x-ui-component = Card
+    schema("CardData") {
+        # @x-ui-component = Prose
+        # @x-ui-settings = {
+        #   columns = 2
+        #   layout = "grid"
+        #   order = [
+        #     "kpi"
+        #     "distribution"
+        #   ]
+        # }
+        content: string
+    }
+}
+
+session("gather") {
+    # @x-ui-layout = grid
+    schema {
+        # @x-ui-hidden = true
+        result: $CardData
+    }
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Verify output FML contains annotations and comments properly
+	assert.Contains(t, output, `# @x-ui-layout = dashboard`)
+	assert.Contains(t, output, `# @x-ui-theme = dark`)
+	assert.Contains(t, output, `# @x-ui-component = Input`)
+	assert.Contains(t, output, `#   placeholder = "Enter topic"`)
+	assert.Contains(t, output, `# @x-ui-component = Card`)
+	assert.Contains(t, output, `# @x-ui-settings = {`)
+	assert.Contains(t, output, `#   columns = 2`)
+	assert.Contains(t, output, `#   layout = grid`)
+	assert.Contains(t, output, `#     kpi`)
+	assert.Contains(t, output, `#     distribution`)
+	assert.Contains(t, output, `# @x-ui-layout = grid`)
+	assert.Contains(t, output, `# @x-ui-hidden = true`)
+}

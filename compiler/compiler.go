@@ -51,6 +51,7 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 		case stmt.Comment != nil:
 			c.collectComment(*stmt.Comment)
 		case stmt.System != nil:
+			c.flushRootAnnotations(rootSchema)
 			nv, err := c.nodeValue(stmt.System.Value, stmt.System.InlineComment)
 			if err != nil {
 				return nil, err
@@ -61,10 +62,12 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 				return nil, err
 			}
 		case stmt.Transformer != nil:
+			c.flushRootAnnotations(rootSchema)
 			if err := c.processTransformer(stmt.Transformer); err != nil {
 				return nil, err
 			}
 		case stmt.Set != nil:
+			c.flushRootAnnotations(rootSchema)
 			if c.output.Vars == nil {
 				c.output.Vars = &yaml.Node{Kind: yaml.MappingNode}
 			}
@@ -72,10 +75,12 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 				return nil, err
 			}
 		case stmt.Require != nil:
+			c.flushRootAnnotations(rootSchema)
 			if err := c.processRequire(stmt.Require); err != nil {
 				return nil, err
 			}
 		case stmt.Call != nil:
+			c.flushRootAnnotations(rootSchema)
 			callNode, err := c.compileCallNode(stmt.Call)
 			if err != nil {
 				return nil, err
@@ -85,11 +90,14 @@ func (c *Compiler) Compile() (*PlanYAML, error) {
 			}
 			c.output.PreCalls.Content = append(c.output.PreCalls.Content, callNode)
 		case stmt.Session != nil:
+			c.flushRootAnnotations(rootSchema)
 			if err := c.processSession(stmt.Session); err != nil {
 				return nil, err
 			}
 		}
 	}
+
+	c.flushRootAnnotations(rootSchema)
 
 	// Grouped session schema finalization
 	for _, name := range c.sessionOrder {
@@ -229,10 +237,12 @@ func (c *Compiler) processParameter(p *parser.ParameterBlock) error {
 		}
 	}
 
-	desc := c.resolveDescription(p.LeadingComments, p.InlineComment)
-	if desc != "" {
-		param.Schema.Description = desc
+	leadingComments := p.LeadingComments
+	if len(leadingComments) == 0 {
+		leadingComments = c.pendingComments
+		c.pendingComments = nil
 	}
+	c.resolveDescriptionAndAnnotations(leadingComments, p.InlineComment, param.Schema)
 
 	node, err := c.nodeValue(param, nil)
 	if err != nil {
@@ -351,18 +361,13 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 				Type:       parser.TypeObject,
 				Properties: make(map[string]*JSONSchema),
 			}
-			if item.Schema.InlineComment != nil {
-				schema.Description = strings.TrimSpace(strings.TrimPrefix(*item.Schema.InlineComment, "#"))
-			}
+			c.resolveDescriptionAndAnnotations(item.Schema.LeadingComments, item.Schema.InlineComment, schema)
 			for _, field := range item.Schema.Fields {
 				fSchema, err := c.compileType(field.Type)
 				if err != nil {
 					return fmt.Errorf("component schema %q: %w", item.Schema.Name, err)
 				}
-				desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
-				if desc != "" {
-					fSchema.Description = desc
-				}
+				c.resolveDescriptionAndAnnotations(field.LeadingComments, field.InlineComment, fSchema)
 				schema.Properties[field.Name] = fSchema
 				if !field.Optional {
 					schema.Required = append(schema.Required, field.Name)
@@ -503,10 +508,12 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 			if err != nil {
 				return fmt.Errorf("session %q: %w", s.Name, err)
 			}
-
-			if desc := c.resolveDescription(nil, stmt.Schema.InlineComment); desc != "" {
-				compiled.Description = desc
+			leadingComments := stmt.Schema.LeadingComments
+			if len(leadingComments) == 0 {
+				leadingComments = c.pendingComments
+				c.pendingComments = nil
 			}
+			c.resolveDescriptionAndAnnotations(leadingComments, stmt.Schema.InlineComment, compiled)
 
 			// If it's a plain object (not array, not ref), we merge fields
 			if compiled.Type == parser.TypeObject && compiled.Items == nil && compiled.Ref == "" && len(compiled.Enum) == 0 {
@@ -525,6 +532,14 @@ func (c *Compiler) processSession(s *parser.SessionBlock) error {
 				}
 				if sessSchema.Description == "" {
 					sessSchema.Description = compiled.Description
+				}
+				if len(compiled.Extensions) > 0 {
+					if sessSchema.Extensions == nil {
+						sessSchema.Extensions = make(map[string]interface{})
+					}
+					for k, v := range compiled.Extensions {
+						sessSchema.Extensions[k] = v
+					}
 				}
 				for name, fSchema := range compiled.Properties {
 					if _, exists := sessSchema.Properties[name]; exists {
@@ -840,10 +855,7 @@ func (c *Compiler) compileTypeBase(t *parser.TypeBase) (*JSONSchema, error) {
 			if err != nil {
 				return nil, err
 			}
-			desc := c.resolveDescription(field.LeadingComments, field.InlineComment)
-			if desc != "" {
-				fSchema.Description = desc
-			}
+			c.resolveDescriptionAndAnnotations(field.LeadingComments, field.InlineComment, fSchema)
 			schema.Properties[field.Name] = fSchema
 			if !field.Optional {
 				schema.Required = append(schema.Required, field.Name)
@@ -891,18 +903,48 @@ func (c *Compiler) compileValue(v *parser.Value) interface{} {
 	return nil
 }
 
-func (c *Compiler) resolveDescription(leading []string, inline *string) string {
-	if inline != nil {
-		return strings.TrimSpace(strings.TrimPrefix(*inline, "#"))
+func (c *Compiler) resolveDescriptionAndAnnotations(leading []string, inline *string, schema *JSONSchema) {
+	// Parse annotations and get remaining comments (which form the description)
+	extensions, remainingComments := ParseAnnotations(leading)
+	if len(extensions) > 0 {
+		if schema.Extensions == nil {
+			schema.Extensions = make(map[string]interface{})
+		}
+		for k, v := range extensions {
+			schema.Extensions[k] = v
+		}
 	}
-	if len(leading) > 0 {
+
+	// Resolve description using only remaining comments
+	var desc string
+	if inline != nil {
+		desc = strings.TrimSpace(strings.TrimPrefix(*inline, "#"))
+	} else if len(remainingComments) > 0 {
 		var lines []string
-		for _, l := range leading {
+		for _, l := range remainingComments {
 			lines = append(lines, strings.TrimSpace(strings.TrimPrefix(l, "#")))
 		}
-		return strings.Join(lines, " ")
+		desc = strings.Join(lines, " ")
 	}
-	return ""
+	if desc != "" {
+		schema.Description = desc
+	}
+}
+
+func (c *Compiler) flushRootAnnotations(rootSchema *JSONSchema) {
+	if len(c.pendingComments) == 0 {
+		return
+	}
+	extensions, remaining := ParseAnnotations(c.pendingComments)
+	if len(extensions) > 0 {
+		if rootSchema.Extensions == nil {
+			rootSchema.Extensions = make(map[string]interface{})
+		}
+		for k, v := range extensions {
+			rootSchema.Extensions[k] = v
+		}
+	}
+	c.pendingComments = remaining
 }
 
 func (c *Compiler) isTypeArray(s *JSONSchema) bool {

@@ -729,6 +729,8 @@ func (c *Compiler) compileCallNode(call *parser.CallBlock) (*yaml.Node, error) {
 			y.Args[*field.Ident] = c.compileValue(field.Value)
 		} else if field.Code != nil {
 			y.Code = strings.TrimSpace(*field.Code)
+		} else if field.Kbs != nil {
+			y.Kbs = strings.TrimSpace(*field.Kbs)
 		}
 	}
 	return c.nodeValue(y, call.InlineComment)

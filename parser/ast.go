@@ -78,6 +78,7 @@ type CallTarget struct {
 
 type CallField struct {
 	Code          *string `("code" "(" @CodeValue ")"`
+	Kbs           *string `| "kbs" "(" @CodeValue ")"`
 	Ident         *string `| (@Ident | @String) "="`
 	Value         *Value  `@@)`
 	InlineComment *string `@InlineComment?`

@@ -382,3 +382,40 @@ func TestFMLHandler_SemanticTokens(t *testing.T) {
 	assert.True(t, foundPromptStart, "Should find the first line of the prompt at correct offset")
 	assert.True(t, foundContinuation, "Should find the continuation line of the prompt at correct offset (indented)")
 }
+
+func TestFMLHandler_Completion_CallContext(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: "session(\"s\") {\n  call(\"kb_tool\") {\n    \n  }\n}",
+	}
+
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 2, Character: 4},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	assert.NoError(t, err)
+
+	hasKbs := false
+	hasCode := false
+	hasAllowlist := false
+	for _, item := range resp.Items {
+		if item.Label == "kbs" {
+			hasKbs = true
+		}
+		if item.Label == "code" {
+			hasCode = true
+		}
+		if item.Label == "allowlist =" {
+			hasAllowlist = true
+		}
+	}
+
+	assert.True(t, hasKbs, "Should suggest 'kbs' inside call block")
+	assert.True(t, hasCode, "Should suggest 'code' inside call block")
+	assert.False(t, hasAllowlist, "Should NOT suggest 'allowlist =' inside call block")
+}

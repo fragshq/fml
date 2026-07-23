@@ -812,3 +812,34 @@ session("gather") {
 	assert.Contains(t, output, `# @x-ui-layout = grid`)
 	assert.Contains(t, output, `# @x-ui-hidden = true`)
 }
+
+func TestDecompiler_CallKbs(t *testing.T) {
+	input := `session("s") {
+    call("kb_tool") {
+        kbs( doc_ref_123 )
+    }
+}
+`
+	p, _ := parser.NewParser()
+	plan, _ := p.ParseString("test.frags", input)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `call("kb_tool")`)
+	assert.Contains(t, output, `kbs( doc_ref_123 )`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}

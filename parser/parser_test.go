@@ -65,6 +65,16 @@ func TestParser_CallCode(t *testing.T) {
 	assert.Contains(t, code, "args.x.map")
 }
 
+func TestParser_CallKbs(t *testing.T) {
+	p, _ := NewParser()
+	input := `call("test") { kbs( my_kb_id ) }`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	kbs := *plan.Statements[0].Call.Fields[0].Kbs
+	assert.Contains(t, kbs, "my_kb_id")
+}
+
 func TestParser_EnumTypes(t *testing.T) {
 	p, _ := NewParser()
 	input := `parameter("status", type="up"|"down"|pending)`

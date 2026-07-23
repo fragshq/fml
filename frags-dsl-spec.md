@@ -136,8 +136,10 @@ CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? 
 
 CallField    ← (IDENTIFIER / STRING_LIT) "=" Value NEWLINE
              / CodeBlock
+             / KbsBlock
 
 CodeBlock    ← "code" "(" RawJS ")"
+KbsBlock     ← "kbs" "(" RawJS ")"
 
 RawJS        ← ( [^()] / "(" RawJS ")" )*    # balanced parens, recursive
 
@@ -819,12 +821,16 @@ call("label") -> namespace:myVar {
 | no `->` | `in: ai` | No `var` field emitted |
 | key-value pairs | `args: {key: value}` | Omit `args` if empty. Support nested objects and `$(...)`. |
 | `code(...)` | `code: "..."` | JS expression; strip outer whitespace |
+| `kbs(...)` | `kbs: "..."` | KB configuration/references; strip outer whitespace |
 
 When `code` is present, `name` acts as a label (not a tool reference). The `args` map
 provides inputs accessible as `args.key` inside the code expression.
 
 The code content is the raw JS expression from inside `code(...)`, with leading and trailing
 whitespace trimmed. The parentheses of `code(...)` are not included in the output value.
+
+The kbs content is the raw content from inside `kbs(...)`, with leading and trailing
+whitespace trimmed. The parentheses of `kbs(...)` are not included in the output value.
 
 ---
 

@@ -556,8 +556,9 @@ func (d *Decompiler) writeCall(sb *strings.Builder, cNode *yaml.Node, indent str
 
 	args := d.getMapValue(cNode, "args")
 	code := d.getMapValue(cNode, "code")
+	kbs := d.getMapValue(cNode, "kbs")
 
-	if args != nil || code != nil {
+	if args != nil || code != nil || kbs != nil {
 		sb.WriteString(" {\n")
 		if args != nil {
 			for i := 0; i+1 < len(args.Content); i += 2 {
@@ -566,6 +567,9 @@ func (d *Decompiler) writeCall(sb *strings.Builder, cNode *yaml.Node, indent str
 		}
 		if code != nil {
 			sb.WriteString(fmt.Sprintf("%s    code( %s )\n", indent, code.Value))
+		}
+		if kbs != nil {
+			sb.WriteString(fmt.Sprintf("%s    kbs( %s )\n", indent, kbs.Value))
 		}
 		sb.WriteString(fmt.Sprintf("%s}\n", indent))
 	} else {

@@ -86,6 +86,7 @@ type CallYAML struct {
 	Name string                 `yaml:"name"`
 	Args map[string]interface{} `yaml:"args,omitempty"`
 	Code string                 `yaml:"code,omitempty"`
+	Kbs  string                 `yaml:"kbs,omitempty"`
 	In   string                 `yaml:"in,omitempty"`
 	Var  string                 `yaml:"var,omitempty"`
 }

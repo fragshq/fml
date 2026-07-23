@@ -82,6 +82,11 @@ func (h *FMLHandler) Completion(ctx context.Context, params *lsp.CompletionParam
 		return &lsp.CompletionList{Items: componentsKeywordCompletions()}, nil
 	}
 
+	// 6.3 Call block keywords
+	if blockType == "call" {
+		return &lsp.CompletionList{Items: callBlockCompletions()}, nil
+	}
+
 	// 7. Top-level blocks
 	if blockType == "top" {
 		return &lsp.CompletionList{
@@ -174,7 +179,14 @@ func useBlockCompletions() []lsp.CompletionItem {
 func componentsKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
 		{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output schema."}},
-		{Label: "prompt", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "prompt(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable prompt component."}},
+		{Label: "prompt", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "prompt(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable prompt template."}},
+	}
+}
+
+func callBlockCompletions() []lsp.CompletionItem {
+	return []lsp.CompletionItem{
+		{Label: "code", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "code( ... )", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Custom JavaScript code for post-processing tool results."}},
+		{Label: "kbs", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "kbs( ... )", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Specifies knowledge base settings or references for the call."}},
 	}
 }
 
@@ -253,6 +265,9 @@ func (h *FMLHandler) findBlockType(lines []string, lineNum int) string {
 			}
 			if strings.HasPrefix(trimmedLine, "components") {
 				return "components"
+			}
+			if strings.HasPrefix(trimmedLine, "call") {
+				return "call"
 			}
 		}
 

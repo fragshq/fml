@@ -175,7 +175,7 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 						l.expectingAttrValue = true
 					}
 				} else if t.Value == "(" {
-					if l.lastIdent == "code" {
+					if l.lastIdent == "code" || l.lastIdent == "kbs" {
 						l.expectingCode = true
 					}
 				}

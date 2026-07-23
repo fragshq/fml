@@ -153,4 +153,5 @@ type JSONSchema struct {
 	Enum        []interface{}          `yaml:"enum,omitempty"`
 	Ref         string                 `yaml:"$ref,omitempty"`
 	XSession    string                 `yaml:"x-session,omitempty"`
+	Extensions  map[string]interface{} `yaml:",inline"`
 }

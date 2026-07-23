@@ -2,6 +2,7 @@ package decompiler
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/theirish81/fml/compiler"
@@ -29,6 +30,18 @@ func (d *Decompiler) Decompile() (string, error) {
 		return "", fmt.Errorf("plan is nil")
 	}
 	var sb strings.Builder
+
+	var rootSchema compiler.JSONSchema
+	if d.plan.Schema != nil {
+		if err := d.plan.Schema.Decode(&rootSchema); err != nil {
+			return "", fmt.Errorf("failed to decode root schema: %w", err)
+		}
+	}
+
+	if len(rootSchema.Extensions) > 0 {
+		d.writeSchemaFieldComments(&sb, &rootSchema, "")
+		sb.WriteString("\n")
+	}
 
 	if d.plan.SystemPrompt != nil {
 		d.writeBlockComment(&sb, d.plan.Comments["systemPrompt"], "")
@@ -96,13 +109,20 @@ func (d *Decompiler) Decompile() (string, error) {
 		d.writeBlockComment(&sb, d.plan.Comments["components"], "")
 		sb.WriteString("components {\n")
 		if len(d.plan.Components.Schemas) > 0 {
-			for name, schema := range d.plan.Components.Schemas {
+			names := make([]string, 0, len(d.plan.Components.Schemas))
+			for name := range d.plan.Components.Schemas {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				schema := d.plan.Components.Schemas[name]
+				hasLeading := d.writeSchemaFieldComments(&sb, schema, "    ")
 				sb.WriteString(fmt.Sprintf("    schema(%q) {\n", name))
 				if err := d.writeSchemaFields(&sb, schema, "        "); err != nil {
 					return "", err
 				}
 				sb.WriteString("    }")
-				if schema.Description != "" {
+				if !hasLeading && schema.Description != "" {
 					sb.WriteString(fmt.Sprintf(" # %s", schema.Description))
 				}
 				sb.WriteString("\n")
@@ -130,10 +150,6 @@ func (d *Decompiler) Decompile() (string, error) {
 		requiredProps := make(map[string]bool)
 
 		if d.plan.Schema != nil {
-			var rootSchema compiler.JSONSchema
-			if err := d.plan.Schema.Decode(&rootSchema); err != nil {
-				return "", fmt.Errorf("failed to decode root schema: %w", err)
-			}
 			for _, r := range rootSchema.Required {
 				requiredProps[r] = true
 			}
@@ -190,6 +206,11 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 	var schema compiler.JSONSchema
 	if err := schemaNode.Decode(&schema); err != nil {
 		return fmt.Errorf("failed to decode schema for parameter %q: %w", name, err)
+	}
+
+	hasLeading := false
+	if len(schema.Extensions) > 0 {
+		hasLeading = d.writeSchemaFieldComments(sb, &schema, "")
 	}
 
 	typ, err := d.formatType(&schema, "")
@@ -250,7 +271,7 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 		}
 	}
 	// 5. Check for 'description' inside the schema
-	if comment == "" && schema.Description != "" {
+	if !hasLeading && comment == "" && schema.Description != "" {
 		comment = schema.Description
 	}
 
@@ -470,19 +491,20 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 				opt = "?"
 			}
 
+			hasLeading := d.writeSchemaFieldComments(sb, s, "    ")
 			if s.Type == parser.TypeObject && len(s.Properties) > 0 {
 				sb.WriteString(fmt.Sprintf("    schema%s {\n", opt))
 				if err := d.writeSchemaFields(sb, s, "        "); err != nil {
 					return err
 				}
 				sb.WriteString("    }")
-				if s.Description != "" {
+				if !hasLeading && s.Description != "" {
 					sb.WriteString(fmt.Sprintf(" # %s", s.Description))
 				}
 				sb.WriteString("\n")
 			} else {
 				// Avoid writing default session schemas (previously empty object, now string)
-				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" {
+				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" && len(s.Extensions) == 0 {
 					continue
 				}
 
@@ -491,7 +513,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 					return err
 				}
 				sb.WriteString(fmt.Sprintf("    schema%s %s", opt, ft))
-				if s.Description != "" {
+				if !hasLeading && s.Description != "" {
 					sb.WriteString(fmt.Sprintf(" # %s", s.Description))
 				}
 				sb.WriteString("\n")
@@ -573,7 +595,18 @@ func (d *Decompiler) writePromptItem(sb *strings.Builder, text string, prefix st
 }
 
 func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSchema, indent string) error {
-	for name, prop := range s.Properties {
+	keys := make([]string, 0, len(s.Properties))
+	for name := range s.Properties {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		prop := s.Properties[name]
+		hasLeading := false
+		if len(prop.Extensions) > 0 || (prop.Description != "" && (strings.Contains(prop.Description, "\n") || strings.Contains(indent, "\n"))) {
+			hasLeading = d.writeSchemaFieldComments(sb, prop, indent)
+		}
 		sb.WriteString(fmt.Sprintf("%s%s", indent, d.formatKey(name)))
 		isRequired := false
 		for _, r := range s.Required {
@@ -590,7 +623,7 @@ func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSche
 			return err
 		}
 		sb.WriteString(fmt.Sprintf(": %s", ft))
-		if prop.Description != "" && !strings.Contains(ft, "\n") {
+		if !hasLeading && prop.Description != "" && !strings.Contains(ft, "\n") {
 			sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
 		}
 		sb.WriteString("\n")
@@ -639,7 +672,21 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 		var sb strings.Builder
 		sb.WriteString("{\n")
 		newIndent := indent + "    "
-		for name, prop := range s.Properties {
+		keys := make([]string, 0, len(s.Properties))
+		for name := range s.Properties {
+			keys = append(keys, name)
+		}
+		sort.Strings(keys)
+
+		for _, name := range keys {
+			prop := s.Properties[name]
+			hasLeading := false
+			if len(prop.Extensions) > 0 || (prop.Description != "" && strings.Contains(prop.Description, "\n")) {
+				var cSb strings.Builder
+				d.writeSchemaFieldComments(&cSb, prop, newIndent)
+				sb.WriteString(cSb.String())
+				hasLeading = true
+			}
 			sb.WriteString(newIndent + name)
 			isRequired := false
 			for _, r := range s.Required {
@@ -656,7 +703,7 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 				return "", err
 			}
 			sb.WriteString(": " + ft)
-			if prop.Description != "" {
+			if !hasLeading && prop.Description != "" {
 				sb.WriteString(fmt.Sprintf(" # %s", prop.Description))
 			}
 			sb.WriteString("\n")
@@ -764,4 +811,32 @@ func (d *Decompiler) writeBlockComment(sb *strings.Builder, comment string, inde
 		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "#"))
 		sb.WriteString(fmt.Sprintf("%s# %s\n", indent, trimmed))
 	}
+}
+
+func (d *Decompiler) writeSchemaFieldComments(sb *strings.Builder, s *compiler.JSONSchema, indent string) bool {
+	hasLeading := false
+	if s.Description != "" && (strings.Contains(s.Description, "\n") || len(s.Extensions) > 0) {
+		lines := strings.Split(s.Description, "\n")
+		for _, line := range lines {
+			sb.WriteString(fmt.Sprintf("%s# %s\n", indent, line))
+		}
+		hasLeading = true
+	}
+	if len(s.Extensions) > 0 {
+		keys := make([]string, 0, len(s.Extensions))
+		for k := range s.Extensions {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			val := s.Extensions[k]
+			formatted := compiler.FormatAnnotation(k, val)
+			lines := strings.Split(formatted, "\n")
+			for _, line := range lines {
+				sb.WriteString(fmt.Sprintf("%s# %s\n", indent, line))
+			}
+		}
+		hasLeading = true
+	}
+	return hasLeading
 }

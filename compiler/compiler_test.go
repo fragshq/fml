@@ -722,3 +722,90 @@ session("gather") {
 	assert.Equal(t, "boolean", gatherSchema.Properties["f1"].Type)
 	assert.Equal(t, "boolean", gatherSchema.Properties["f2"].Type)
 }
+
+func TestCompiler_Annotations(t *testing.T) {
+	input := `
+# @x-ui-layout = dashboard
+# @x-ui-theme = dark
+
+system("Precise Assistant")
+
+# @x-ui-component = Input
+# @x-ui-settings = {
+#   placeholder = "Enter topic"
+# }
+# Regular description
+parameter("topic", type=string)
+
+components {
+    # @x-ui-component = Card
+    schema("CardData") {
+        # @x-ui-component = Prose
+        # @x-ui-settings = {
+        #   layout = "grid"
+        #   columns = 2
+        #   order = [
+        #     "kpi"
+        #     "distribution"
+        #   ]
+        # }
+        content: string
+    }
+}
+
+session("gather") {
+    # @x-ui-layout = grid
+    schema {
+        # @x-ui-hidden = true
+        result: $CardData
+    }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out)
+
+	// Verify parameter annotations
+	type Param struct {
+		Name   string     `yaml:"name"`
+		Schema JSONSchema `yaml:"schema"`
+	}
+	require.Len(t, out.Parameters.Content, 1)
+	var p Param
+	err = out.Parameters.Content[0].Decode(&p)
+	assert.NoError(t, err)
+	assert.Equal(t, "topic", p.Name)
+	assert.Equal(t, "Regular description", p.Schema.Description)
+	assert.Equal(t, "Input", p.Schema.Extensions["x-ui-component"])
+	settings, ok := p.Schema.Extensions["x-ui-settings"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "Enter topic", settings["placeholder"])
+
+	// Verify component schema annotations
+	cardSchema := out.Components.Schemas["CardData"]
+	require.NotNil(t, cardSchema)
+	assert.Equal(t, "Card", cardSchema.Extensions["x-ui-component"])
+	contentField := cardSchema.Properties["content"]
+	require.NotNil(t, contentField)
+	assert.Equal(t, "Prose", contentField.Extensions["x-ui-component"])
+	contentSettings, ok := contentField.Extensions["x-ui-settings"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "grid", contentSettings["layout"])
+	assert.Equal(t, 2, contentSettings["columns"])
+	order, ok := contentSettings["order"].([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, []interface{}{"kpi", "distribution"}, order)
+
+	// Verify session schema annotations
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+	assert.Equal(t, "dashboard", schema.Extensions["x-ui-layout"])
+	assert.Equal(t, "dark", schema.Extensions["x-ui-theme"])
+	gatherSchema := schema.Properties["gather"]
+	require.NotNil(t, gatherSchema)
+	assert.Equal(t, "grid", gatherSchema.Extensions["x-ui-layout"])
+	resultField := gatherSchema.Properties["result"]
+	require.NotNil(t, resultField)
+	assert.Equal(t, true, resultField.Extensions["x-ui-hidden"])
+}

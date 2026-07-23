@@ -121,15 +121,17 @@ type ComponentItem struct {
 }
 
 type SchemaComponent struct {
-	Name          string         `"schema" "(" @String ")" "{"`
-	Fields        []*SchemaField `(@@ (","? @@)*)? "}"`
-	InlineComment *string        `@InlineComment?`
+	LeadingComments []string       `@Comment*`
+	Name            string         `"schema" "(" @String ")" "{"`
+	Fields          []*SchemaField `(@@ (","? @@)*)? "}"`
+	InlineComment   *string        `@InlineComment?`
 }
 
 type PromptComponent struct {
-	Name          string  `"prompt" "(" @String ")" "{"`
-	Value         string  `@String "}"`
-	InlineComment *string `@InlineComment?`
+	LeadingComments []string `@Comment*`
+	Name            string   `"prompt" "(" @String ")" "{"`
+	Value           string   `@String "}"`
+	InlineComment   *string  `@InlineComment?`
 }
 
 // SessionBlock represents a logical pipeline step with its own context, tools, and output schema.
@@ -192,9 +194,10 @@ type PromptLine struct {
 
 // SchemaBlock defines the output structure of a session or component.
 type SchemaBlock struct {
-	Optional      bool      `"schema" @("?")?`
-	Type          *TypeExpr `@@`
-	InlineComment *string   `@InlineComment?`
+	LeadingComments []string  `@Comment*`
+	Optional        bool      `"schema" @("?")?`
+	Type            *TypeExpr `@@`
+	InlineComment   *string   `@InlineComment?`
 }
 
 type SchemaField struct {

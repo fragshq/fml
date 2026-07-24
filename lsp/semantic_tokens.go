@@ -113,7 +113,7 @@ func (h *FMLHandler) SemanticTokensFull(ctx context.Context, params *lsp.Semanti
 var semanticKeywords = map[string]int{
 	"system": 0, "parameter": 0, "transformer": 0, "call": 0, "session": 0,
 	"require": 0, "use": 0, "mcp": 0, "apicp": 0, "collection": 0, "function": 0, "search": 0,
-	"context": 0, "set": 0, "vars": 0, "db": 0, "params": 0, "it": 0, "ai": 0, "schema": 0, "components": 0, "prompt": 0, "code": 0, "kbs": 0, "resource": 0,
+	"context": 0, "set": 0, "vars": 0, "db": 0, "params": 0, "it": 0, "ai": 0, "schema": 0, "components": 0, "prompt": 0, "script": 0, "code": 0, "kbs": 0, "resource": 0,
 	"after": 0, "expect": 0, "iterate": 0, "target": 0, "type": 0, "default": 0, "title": 0, "enum": 0,
 	"allowlist":        0,
 	"onFunctionOutput": 0, "onFunctionInput": 0, "onResource": 0, "jmesPath": 0, "parser": 0,

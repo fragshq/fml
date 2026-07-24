@@ -139,6 +139,43 @@ func (d *Decompiler) Decompile() (string, error) {
 				sb.WriteString("\n")
 			}
 		}
+		if len(d.plan.Components.Scripts) > 0 {
+			names := make([]string, 0, len(d.plan.Components.Scripts))
+			for name := range d.plan.Components.Scripts {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				script := d.plan.Components.Scripts[name]
+				var parts []string
+				parts = append(parts, fmt.Sprintf("%q", name))
+				parts = append(parts, fmt.Sprintf("type=%q", script.Type))
+				if script.Description != "" {
+					parts = append(parts, fmt.Sprintf("description=%q", script.Description))
+				}
+				if len(script.Parameters) > 0 {
+					var pParts []string
+					for _, param := range script.Parameters {
+						typ, err := d.formatType(param.Schema, "")
+						if err != nil {
+							return "", err
+						}
+						pParts = append(pParts, fmt.Sprintf("%s: %s", param.Name, typ))
+					}
+					parts = append(parts, fmt.Sprintf("parameters={%s}", strings.Join(pParts, ", ")))
+				}
+				sb.WriteString(fmt.Sprintf("    script(%s) (\n", strings.Join(parts, ", ")))
+				lines := strings.Split(script.Script, "\n")
+				for _, line := range lines {
+					if strings.TrimSpace(line) == "" {
+						sb.WriteString("\n")
+					} else {
+						sb.WriteString("        " + line + "\n")
+					}
+				}
+				sb.WriteString("    )\n")
+			}
+		}
 		sb.WriteString("}\n\n")
 	}
 

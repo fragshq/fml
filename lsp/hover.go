@@ -88,6 +88,7 @@ var languageDocs = map[string]string{
 	"transformer": "**transformer(\"name\") { ... }**\n\nDefines a reusable output transformer that can be triggered by tool inputs or outputs.",
 	"components":  "**components { ... }**\n\nDefines reusable schemas and prompt templates that can be referenced elsewhere in the plan.",
 	"prompt":      "**prompt(\"name\") { \"...\" }**\n\nDefines a reusable prompt component within the `components` block.",
+	"script":      "**script(\"name\", type=\"code\"|\"kbs\", description=\"...\", parameters={...}) ( ... )**\n\nDefines a reusable script component within the `components` block. Can be of type `code` or `kbs`, accepts parameters, and has a trailing code block body.",
 	"code":        "**code( ... )**\n\nExecutes custom JavaScript code for processing tool results or transformer logic.",
 	"kbs":         "**kbs( ... )**\n\nExecutes custom Knowledge Base programming language code (Prolog in the default implementation)",
 	"+":           "**+ Pre-prompt line**\n\nDefines a pre-prompt for the session. Multiple pre-prompts are collected into a single `prePrompt` field in the compiled plan. Pre-prompts are typically used for providing context or few-shot examples.",

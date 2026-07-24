@@ -43,12 +43,16 @@ func (d *FRAGSLexerDefinition) Symbols() map[string]lexer.TokenType {
 }
 
 type fragsLexer struct {
-	s                  string
-	pos                lexer.Position
-	lastIdent          string
-	expectingAttrValue bool
-	expectingCode      bool
-	hasTokensOnLine    bool
+	s                      string
+	pos                    lexer.Position
+	lastIdent              string
+	expectingAttrValue     bool
+	expectingCode          bool
+	hasTokensOnLine        bool
+	seenScript             bool
+	inScriptHeader         bool
+	scriptHeaderParenDepth int
+	expectingScriptBody    bool
 }
 
 func (l *fragsLexer) updatePos(val string) {
@@ -160,6 +164,9 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 		case unicode.IsLetter(rune(r)) || r == '_':
 			t = l.consumeIdent()
 			l.lastIdent = t.Value
+			if t.Value == "script" {
+				l.seenScript = true
+			}
 		case strings.ContainsRune("][{}():,=|?$-", rune(r)):
 			if strings.HasPrefix(l.s, "->") {
 				t = l.consume(2, SymPunct)
@@ -177,6 +184,23 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 				} else if t.Value == "(" {
 					if l.lastIdent == "code" || l.lastIdent == "kbs" {
 						l.expectingCode = true
+					} else if l.seenScript {
+						l.seenScript = false
+						l.inScriptHeader = true
+						l.scriptHeaderParenDepth = 1
+					} else if l.expectingScriptBody {
+						l.expectingCode = true
+						l.expectingScriptBody = false
+					} else if l.inScriptHeader {
+						l.scriptHeaderParenDepth++
+					}
+				} else if t.Value == ")" {
+					if l.inScriptHeader {
+						l.scriptHeaderParenDepth--
+						if l.scriptHeaderParenDepth == 0 {
+							l.inScriptHeader = false
+							l.expectingScriptBody = true
+						}
 					}
 				}
 				if t.Value != "," {
@@ -190,6 +214,18 @@ func (l *fragsLexer) Next() (lexer.Token, error) {
 
 	if err == nil && t.Type != TokenEOF {
 		l.hasTokensOnLine = true
+		if t.Type != TokenIdent || t.Value != "script" {
+			if t.Type != TokenWhitespace && t.Type != TokenComment && t.Type != TokenInlineComment {
+				l.seenScript = false
+			}
+		}
+		if t.Value != "(" {
+			if t.Type != TokenWhitespace && t.Type != TokenComment && t.Type != TokenInlineComment {
+				if t.Value != ")" {
+					l.expectingScriptBody = false
+				}
+			}
+		}
 	}
 	return t, err
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/theirish81/fml/parser"
 )
 
 func TestFMLHandler_Initialize(t *testing.T) {
@@ -291,6 +292,7 @@ func TestFMLHandler_Completion_ComponentsContext(t *testing.T) {
 
 	hasSchema := false
 	hasPrompt := false
+	hasScript := false
 	for _, item := range resp.Items {
 		if item.Label == "schema" {
 			hasSchema = true
@@ -298,9 +300,13 @@ func TestFMLHandler_Completion_ComponentsContext(t *testing.T) {
 		if item.Label == "prompt" {
 			hasPrompt = true
 		}
+		if item.Label == "script" {
+			hasScript = true
+		}
 	}
 	assert.True(t, hasSchema, "Should suggest 'schema' in components")
 	assert.True(t, hasPrompt, "Should suggest 'prompt' in components")
+	assert.True(t, hasScript, "Should suggest 'script' in components")
 }
 
 func TestFMLHandler_Hover(t *testing.T) {
@@ -330,6 +336,15 @@ func TestFMLHandler_Hover(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.Contents.Value, "Restricts a parameter or field")
+
+	// Test "script" hover
+	params.Position.Character = 0
+	handler.documents[uri] = "script"
+	params.Position.Character = 2 // inside "script"
+	resp, err = handler.Hover(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Contains(t, resp.Contents.Value, "Defines a reusable script component")
 }
 
 func TestFMLHandler_SemanticTokens(t *testing.T) {
@@ -418,4 +433,33 @@ func TestFMLHandler_Completion_CallContext(t *testing.T) {
 	assert.True(t, hasKbs, "Should suggest 'kbs' inside call block")
 	assert.True(t, hasCode, "Should suggest 'code' inside call block")
 	assert.False(t, hasAllowlist, "Should NOT suggest 'allowlist =' inside call block")
+}
+
+func TestFMLHandler_Diagnostics_ScriptComponent(t *testing.T) {
+	p, err := parser.NewParser()
+	assert.NoError(t, err)
+
+	// Case 1: Valid script parses without errors
+	validInput := `components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string}) (
+		some script code goes here
+	)
+}`
+	_, err = p.ParseString("file:///test.fml", validInput)
+	assert.NoError(t, err)
+
+	// Case 2: Invalid script (unclosed parenthesis in script body) produces a diagnostic syntax error
+	invalidInput := `components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string}) (
+		some script code goes here
+}`
+	_, err = p.ParseString("file:///test.fml", invalidInput)
+	assert.Error(t, err)
+
+	pos, msg, ok := parser.ErrorPosition(err)
+	assert.True(t, ok)
+	// The lexer fails on the unclosed balanced block starting at the body content (line 3, column 3)
+	assert.Equal(t, 3, pos.Line)
+	assert.Equal(t, 3, pos.Column)
+	assert.Contains(t, msg, "unclosed balanced block (missing ')')")
 }

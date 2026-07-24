@@ -843,3 +843,28 @@ session("s") {
 	assert.Equal(t, "kb_tool", c.Name)
 	assert.Equal(t, "doc_ref_123", c.Kbs)
 }
+
+func TestCompiler_ScriptComponent(t *testing.T) {
+	input := `
+components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string, arg2: int}) (
+		some script code goes here
+	)
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	require.NotNil(t, out.Components)
+	require.NotNil(t, out.Components.Scripts)
+
+	script := out.Components.Scripts["my_script"]
+	require.NotNil(t, script)
+	assert.Equal(t, "kbs", script.Type)
+	assert.Equal(t, "some description", script.Description)
+	assert.Equal(t, "some script code goes here", script.Script)
+	require.Len(t, script.Parameters, 2)
+	assert.Equal(t, "arg1", script.Parameters[0].Name)
+	assert.Equal(t, "string", script.Parameters[0].Schema.Type)
+	assert.Equal(t, "arg2", script.Parameters[1].Name)
+	assert.Equal(t, "integer", script.Parameters[1].Schema.Type)
+}

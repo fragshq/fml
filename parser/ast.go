@@ -119,6 +119,7 @@ type ComponentsBlock struct {
 type ComponentItem struct {
 	Schema *SchemaComponent `@@`
 	Prompt *PromptComponent `| @@`
+	Script *ScriptComponent `| @@`
 }
 
 type SchemaComponent struct {
@@ -133,6 +134,25 @@ type PromptComponent struct {
 	Name            string   `"prompt" "(" @String ")" "{"`
 	Value           string   `@String "}"`
 	InlineComment   *string  `@InlineComment?`
+}
+
+type ScriptComponent struct {
+	LeadingComments []string      `@Comment*`
+	Name            string        `"script" "(" @String`
+	Type            string        `"," "type" "=" @String`
+	Description     *string       `("," "description" "=" @String)?`
+	Parameters      *ScriptParams `("," "parameters" "=" @@)? ")"`
+	Body            string        `"(" @CodeValue ")"`
+	InlineComment   *string       `@InlineComment?`
+}
+
+type ScriptParams struct {
+	Entries []*ScriptParamEntry `"{" (@@ (","? @@)*)? "}"`
+}
+
+type ScriptParamEntry struct {
+	Name string    `(@Ident | @String) ":"`
+	Type *TypeExpr `@@`
 }
 
 // SessionBlock represents a logical pipeline step with its own context, tools, and output schema.

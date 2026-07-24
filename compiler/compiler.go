@@ -353,7 +353,10 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 		c.output.Components = &ComponentsYAML{
 			Schemas: make(map[string]*JSONSchema),
 			Prompts: make(map[string]*yaml.Node),
+			Scripts: make(map[string]*ScriptYAML),
 		}
+	} else if c.output.Components.Scripts == nil {
+		c.output.Components.Scripts = make(map[string]*ScriptYAML)
 	}
 	for _, item := range comp.Items {
 		if item.Schema != nil {
@@ -380,6 +383,42 @@ func (c *Compiler) processComponents(comp *parser.ComponentsBlock) error {
 				return err
 			}
 			c.output.Components.Prompts[item.Prompt.Name] = node
+		} else if item.Script != nil {
+			var desc string
+			if item.Script.Description != nil {
+				desc = *item.Script.Description
+			} else {
+				if item.Script.InlineComment != nil {
+					desc = strings.TrimSpace(strings.TrimPrefix(*item.Script.InlineComment, "#"))
+				} else if len(item.Script.LeadingComments) > 0 {
+					var lines []string
+					for _, l := range item.Script.LeadingComments {
+						lines = append(lines, strings.TrimSpace(strings.TrimPrefix(l, "#")))
+					}
+					desc = strings.Join(lines, " ")
+				}
+			}
+
+			var params []*ParameterYAML
+			if item.Script.Parameters != nil {
+				for _, entry := range item.Script.Parameters.Entries {
+					schema, err := c.compileType(entry.Type)
+					if err != nil {
+						return fmt.Errorf("script component %q parameter %q: %w", item.Script.Name, entry.Name, err)
+					}
+					params = append(params, &ParameterYAML{
+						Name:   entry.Name,
+						Schema: schema,
+					})
+				}
+			}
+
+			c.output.Components.Scripts[item.Script.Name] = &ScriptYAML{
+				Type:        item.Script.Type,
+				Description: desc,
+				Parameters:  params,
+				Script:      strings.TrimSpace(item.Script.Body),
+			}
 		}
 	}
 	return nil

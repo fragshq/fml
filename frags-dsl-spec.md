@@ -153,9 +153,13 @@ ComponentsBlock ← "components" "{" ComponentItem* "}"
 
 ComponentItem   ← SchemaComponent
                 / PromptComponent
+                / ScriptComponent
 
 SchemaComponent ← "schema" "(" STRING_LIT ")" "{" SchemaField* "}"
 PromptComponent ← "prompt" "(" STRING_LIT ")" "{" STRING_LIT "}"
+ScriptComponent ← "script" "(" STRING_LIT "," "type" "=" STRING_LIT ("," "description" "=" STRING_LIT)? ("," "parameters" "=" ScriptParams)? ")" "(" BalancedParens ")"
+ScriptParams    ← "{" (ScriptParamField (","? ScriptParamField)*)? "}"
+ScriptParamField ← IDENTIFIER ":" TypeExpr
 
 # ── session ───────────────────────────────────────────────────────────────────
 
@@ -392,6 +396,9 @@ components {
     prompt("systemBase") {
         "You are a precise assistant."
     }
+    script("my_script", type="kbs", description="some description", parameters={arg1: string, arg2: int}) (
+        some script code goes here
+    )
 }
 ```
 
@@ -399,8 +406,10 @@ components {
 
 - `schema(name)` blocks compile to entries under `components.schemas`.
 - `prompt(name)` blocks compile to entries under `components.prompts`.
+- `script(name)` blocks compile to entries under `components.scripts`.
 - Schema fields follow the same type and `required` rules as session schemas (see §6).
 - Component schemas can be referenced anywhere a type is expected using `$name`.
+- Script components define custom routines (`type` can be `"code"` or `"kbs"`), along with an optional list of parameter definitions under `parameters` and a script body in parenthesis compiled into the `script` field.
 
 ```yaml
 components:
@@ -413,6 +422,18 @@ components:
       required: [street, city]
   prompts:
     systemBase: "You are a precise assistant."
+  scripts:
+    my_script:
+      type: kbs
+      description: "some description"
+      parameters:
+        - name: arg1
+          schema:
+            type: string
+        - name: arg2
+          schema:
+            type: integer
+      script: "some script code goes here"
 ```
 
 ---
@@ -921,10 +942,19 @@ components:
       required: [...]
   prompts:
     name: "..."
+  scripts:
+    name:
+      type: "code" | "kbs"
+      description: "..."
+      parameters:
+        - name: ...
+          schema: ...
+      script: "..."
 ```
 
 `components.schemas` is omitted if no `schema(...)` components are defined.
 `components.prompts` is omitted if no `prompt(...)` components are defined.
+`components.scripts` is omitted if no `script(...)` components are defined.
 
 ---
 

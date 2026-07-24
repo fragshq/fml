@@ -843,3 +843,36 @@ func TestDecompiler_CallKbs(t *testing.T) {
 	y2, _ := yaml.Marshal(planYAML2)
 	assert.Equal(t, string(y1), string(y2))
 }
+
+func TestDecompiler_ScriptComponent(t *testing.T) {
+	input := `components {
+    script("my_script", type="kbs", description="some description", parameters={arg1: string, arg2: int}) (
+        some script code goes here
+    )
+}
+
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	assert.Contains(t, output, `script("my_script", type="kbs", description="some description", parameters={arg1: string, arg2: int})`)
+	assert.Contains(t, output, `some script code goes here`)
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, _ := comp2.Compile()
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}

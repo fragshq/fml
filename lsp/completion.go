@@ -180,6 +180,7 @@ func componentsKeywordCompletions() []lsp.CompletionItem {
 	return []lsp.CompletionItem{
 		{Label: "schema", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "schema(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable output schema."}},
 		{Label: "prompt", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "prompt(\"...\") { ... }", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable prompt template."}},
+		{Label: "script", Kind: ptr(lsp.CompletionItemKindKeyword), Detail: "script(\"...\", type=\"...\") ( ... )", Documentation: &lsp.MarkupContent{Kind: lsp.Markdown, Value: "Defines a reusable script component."}},
 	}
 }
 

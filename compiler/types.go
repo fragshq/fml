@@ -116,6 +116,14 @@ type DependsOnYAML struct {
 type ComponentsYAML struct {
 	Schemas map[string]*JSONSchema `yaml:"schemas,omitempty"`
 	Prompts map[string]*yaml.Node  `yaml:"prompts,omitempty"`
+	Scripts map[string]*ScriptYAML `yaml:"scripts,omitempty"`
+}
+
+type ScriptYAML struct {
+	Type        string           `yaml:"type"`
+	Description string           `yaml:"description,omitempty"`
+	Parameters  []*ParameterYAML `yaml:"parameters,omitempty"`
+	Script      string           `yaml:"script"`
 }
 
 func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
@@ -136,6 +144,10 @@ func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
 				for j := 0; j < len(val.Content); j += 2 {
 					c.Prompts[val.Content[j].Value] = val.Content[j+1]
 				}
+			}
+		case "scripts":
+			if err := val.Decode(&c.Scripts); err != nil {
+				return err
 			}
 		}
 	}

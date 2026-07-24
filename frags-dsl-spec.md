@@ -61,6 +61,7 @@ BLANK_LINE   = a line containing only SP* followed by NEWLINE
 IDENTIFIER   = [a-zA-Z_][a-zA-Z0-9_-]*
 STRING_LIT   = '"' ( [^"\\] | '\\' . )* '"'   # standard JSON-style escaping
 RAW_STRING   = '`' [^`]* '`'                   # multi-line raw string
+STRING       = STRING_LIT | RAW_STRING        # supports both double quotes and backticks
 NUMBER_LIT   = '-'? [0-9]+ ( '.' [0-9]+ )?
 BOOL_LIT     = "true" | "false"
 COMMENT      = '#' [^\n]* NEWLINE              # leading comment (whole line)
@@ -73,7 +74,7 @@ String literals support standard escapes: `\"`, `\\`, `\n`, `\t`.
 Raw strings support newlines and do not interpret escape sequences.
 
 **Go template strings** (`{{ .params.x }}`, `{{ .vars.y }}`, `{{ .it.field }}`,
-`{{ .context.field }}`) appear inside `STRING_LIT` and `RAW_STRING` values and prompt lines and are passed
+`{{ .context.field }}`) appear inside `STRING` values and prompt lines and are passed
 through verbatim to the YAML output without interpretation by the compiler.
 
 **Expr values** are delimited by `$(` … `)`. The content is a Golang Expr expression and is
@@ -108,23 +109,23 @@ RequireStmt  ← "require" ToolType IDENTIFIER? NEWLINE
 
 # ── system ────────────────────────────────────────────────────────────────────
 
-SystemBlock  ← "system" "(" (STRING_LIT / RAW_STRING) ")"
+SystemBlock  ← "system" "(" STRING ")"
 
 # ── parameters ────────────────────────────────────────────────────────────────
 
-ParameterBlock ← "parameter" "(" STRING_LIT ("," ParameterAttr)* ")"
+ParameterBlock ← "parameter" "(" STRING ("," ParameterAttr)* ")"
 
 ParameterAttr  ← "type"    "=" TypeExpr
                / "default" "=" LiteralValue
-               / "title"   "=" STRING_LIT
+               / "title"   "=" STRING
                / "enum"    "=" TypeExpr
 
 # ── transformer ───────────────────────────────────────────────────────────────
 
-TransformerBlock ← "transformer" "(" STRING_LIT ")" "{" TransformerField* "}"
+TransformerBlock ← "transformer" "(" STRING ")" "{" TransformerField* "}"
 
-TransformerField ← TransformerTrigger "=" STRING_LIT NEWLINE
-                 / "jmesPath"         "=" STRING_LIT NEWLINE
+TransformerField ← TransformerTrigger "=" STRING NEWLINE
+                 / "jmesPath"         "=" STRING NEWLINE
                  / "parser"           "=" ("json" | "csv" | "\"json\"" | "\"csv\"") NEWLINE
                  / CodeBlock NEWLINE
 
@@ -132,9 +133,9 @@ TransformerTrigger ← "onFunctionOutput" | "onFunctionInput" | "onResource"
 
 # ── call (plan-level and session-level share the same syntax) ─────────────────
 
-CallBlock    ← "call" "(" STRING_LIT ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? ("{" CallField* "}")?
+CallBlock    ← "call" "(" STRING ")" ("->" (IDENTIFIER ":")? IDENTIFIER)? ("{" CallField* "}")?
 
-CallField    ← (IDENTIFIER / STRING_LIT) "=" Value NEWLINE
+CallField    ← (IDENTIFIER / STRING) "=" Value NEWLINE
              / CodeBlock
              / KbsBlock
 
@@ -155,22 +156,22 @@ ComponentItem   ← SchemaComponent
                 / PromptComponent
                 / ScriptComponent
 
-SchemaComponent ← "schema" "(" STRING_LIT ")" "{" SchemaField* "}"
-PromptComponent ← "prompt" "(" STRING_LIT ")" "{" STRING_LIT "}"
-ScriptComponent ← "script" "(" STRING_LIT "," "type" "=" STRING_LIT ("," "description" "=" STRING_LIT)? ("," "parameters" "=" ScriptParams)? ")" "(" BalancedParens ")"
+SchemaComponent ← "schema" "(" STRING ")" "{" SchemaField* "}"
+PromptComponent ← "prompt" "(" STRING ")" "{" STRING "}"
+ScriptComponent ← "script" "(" STRING "," "type" "=" STRING ("," "description" "=" STRING)? ("," "parameters" "=" ScriptParams)? ")" "(" BalancedParens ")"
 ScriptParams    ← "{" (ScriptParamField (","? ScriptParamField)*)? "}"
 ScriptParamField ← IDENTIFIER ":" TypeExpr
 
 # ── session ───────────────────────────────────────────────────────────────────
 
-SessionBlock ← "session" "(" STRING_LIT SessionAttrList? ")" "{" SessionStmt* "}"
+SessionBlock ← "session" "(" STRING SessionAttrList? ")" "{" SessionStmt* "}"
 
 SessionAttrList ← ("," SessionAttr)+
 
-SessionAttr  ← "after"   "=" STRING_LIT      # dependsOn[].session
+SessionAttr  ← "after"   "=" STRING      # dependsOn[].session
              / "expect"  "=" RawExpr          # dependsOn[].expression (unquoted Expr)
              / "iterate" "=" RawExpr          # iterateOn (unquoted Expr)
-             / "target"  "=" STRING_LIT       # schema property name override
+             / "target"  "=" STRING       # schema property name override
 
 SessionStmt  ← COMMENT
              / SetStmt
@@ -185,11 +186,11 @@ UseStmt      ← "use" ToolType IDENTIFIER? (SP* "{" ToolField* "}")? NEWLINE
 
 ToolType     ← "mcp" | "apicp" | "collection" | "function" | "search"
 
-ToolField    ← "allowlist" "=" "[" STRING_LIT ("," STRING_LIT)* "]" NEWLINE
+ToolField    ← "allowlist" "=" "[" STRING ("," STRING)* "]" NEWLINE
 
-ContextStmt  ← "context" (BOOL_LIT / STRING_LIT) NEWLINE
+ContextStmt  ← "context" (BOOL_LIT / STRING) NEWLINE
 
-ResourceStmt ← "resource" STRING_LIT ("->" (IDENTIFIER ":")? IDENTIFIER)? NEWLINE
+ResourceStmt ← "resource" STRING ("->" (IDENTIFIER ":")? IDENTIFIER)? NEWLINE
 
 # ── prompt lines ──────────────────────────────────────────────────────────────
 
@@ -215,8 +216,8 @@ InlineText   ← [^\n]+
 SchemaBlock  ← "schema" "?"? "{" (SchemaField (","? SchemaField)*)? "}"
              / "schema" "?"? TypeExpr
 
-SchemaField  ← LeadingComment* (IDENTIFIER / STRING_LIT) "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
-             / LeadingComment* (IDENTIFIER / STRING_LIT) "?"? ":" ObjectBody                 INLINE_CMT? NEWLINE
+SchemaField  ← LeadingComment* (IDENTIFIER / STRING) "?"? ":" TypeExpr InlineSchemaExt? INLINE_CMT? NEWLINE
+             / LeadingComment* (IDENTIFIER / STRING) "?"? ":" ObjectBody                 INLINE_CMT? NEWLINE
 
 InlineSchemaExt ← "{" SchemaField* "}"   # for inline object expansion after ":"
 
@@ -238,7 +239,7 @@ ObjectBody   ← "{" (SchemaField (","? SchemaField)*)? "}"                  # i
 RefType      ← "$" IDENTIFIER                        # $ref to component schema
 
 EnumType     ← EnumValue ("|" EnumValue)+
-EnumValue    ← STRING_LIT / IDENTIFIER               # "active"|"inactive" or go|no_go
+EnumValue    ← STRING / IDENTIFIER               # "active"|"inactive" or go|no_go
 
 # ── shared primitives ─────────────────────────────────────────────────────────
 
@@ -249,13 +250,13 @@ Value        ← LiteralValue
              / ObjectValue
              / ArrayValue
 
-LiteralValue ← STRING_LIT | NUMBER_LIT | BOOL_LIT
+LiteralValue ← STRING | NUMBER_LIT | BOOL_LIT
 
 ExprValue    ← "$(" RawExpr ")"
 RawExpr      ← ( [^()] / "(" RawExpr ")" )*  # balanced parens, recursive
 
 ObjectValue  ← "{" (ObjectEntry (","? ObjectEntry)*)? "}"
-ObjectEntry  ← (IDENTIFIER / STRING_LIT) ":" Value
+ObjectEntry  ← (IDENTIFIER / STRING) ":" Value
 
 ArrayValue   ← "[" (Value (","? Value)*)? "]"
 ```

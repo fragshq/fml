@@ -46,11 +46,7 @@ func (d *Decompiler) Decompile() (string, error) {
 	if d.plan.SystemPrompt != nil {
 		d.writeBlockComment(&sb, d.plan.Comments["systemPrompt"], "")
 		val := d.plan.SystemPrompt.Value
-		if strings.Contains(val, "\n") {
-			sb.WriteString(fmt.Sprintf("system(`%s`)\n\n", val))
-		} else {
-			sb.WriteString(fmt.Sprintf("system(%q)\n\n", val))
-		}
+		sb.WriteString(fmt.Sprintf("system(%s)\n\n", d.formatString(val)))
 	}
 
 	if d.plan.Parameters != nil && len(d.plan.Parameters.Content) > 0 {
@@ -117,7 +113,7 @@ func (d *Decompiler) Decompile() (string, error) {
 			for _, name := range names {
 				schema := d.plan.Components.Schemas[name]
 				hasLeading := d.writeSchemaFieldComments(&sb, schema, "    ")
-				sb.WriteString(fmt.Sprintf("    schema(%q) {\n", name))
+				sb.WriteString(fmt.Sprintf("    schema(%s) {\n", d.formatString(name)))
 				if err := d.writeSchemaFields(&sb, schema, "        "); err != nil {
 					return "", err
 				}
@@ -130,8 +126,8 @@ func (d *Decompiler) Decompile() (string, error) {
 		}
 		if len(d.plan.Components.Prompts) > 0 {
 			for name, prompt := range d.plan.Components.Prompts {
-				sb.WriteString(fmt.Sprintf("    prompt(%q) {\n", name))
-				sb.WriteString(fmt.Sprintf("        %q\n", prompt.Value))
+				sb.WriteString(fmt.Sprintf("    prompt(%s) {\n", d.formatString(name)))
+				sb.WriteString(fmt.Sprintf("        %s\n", d.formatString(prompt.Value)))
 				sb.WriteString("    }")
 				if prompt.LineComment != "" {
 					sb.WriteString(fmt.Sprintf(" # %s", prompt.LineComment))
@@ -148,10 +144,10 @@ func (d *Decompiler) Decompile() (string, error) {
 			for _, name := range names {
 				script := d.plan.Components.Scripts[name]
 				var parts []string
-				parts = append(parts, fmt.Sprintf("%q", name))
-				parts = append(parts, fmt.Sprintf("type=%q", script.Type))
+				parts = append(parts, d.formatString(name))
+				parts = append(parts, fmt.Sprintf("type=%s", d.formatString(script.Type)))
 				if script.Description != "" {
-					parts = append(parts, fmt.Sprintf("description=%q", script.Description))
+					parts = append(parts, fmt.Sprintf("description=%s", d.formatString(script.Description)))
 				}
 				if len(script.Parameters) > 0 {
 					var pParts []string
@@ -254,7 +250,7 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 	if err != nil {
 		return err
 	}
-	sb.WriteString(fmt.Sprintf("parameter(%q, type=%s", name, typ))
+	sb.WriteString(fmt.Sprintf("parameter(%s, type=%s", d.formatString(name), typ))
 
 	if schema.Default != nil {
 		var defNode yaml.Node
@@ -265,7 +261,7 @@ func (d *Decompiler) writeParameter(sb *strings.Builder, node *yaml.Node) error 
 	}
 
 	if schema.Title != "" {
-		sb.WriteString(fmt.Sprintf(", title=%q", schema.Title))
+		sb.WriteString(fmt.Sprintf(", title=%s", d.formatString(schema.Title)))
 	}
 
 	sb.WriteString(")")
@@ -326,30 +322,30 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) erro
 		return fmt.Errorf("transformer node missing 'name'")
 	}
 	name := nameNode.Value
-	sb.WriteString(fmt.Sprintf("transformer(%q) {", name))
+	sb.WriteString(fmt.Sprintf("transformer(%s) {", d.formatString(name)))
 	if node.LineComment != "" {
 		sb.WriteString(fmt.Sprintf(" # %s", node.LineComment))
 	}
 	sb.WriteString("\n")
 
 	if v := d.getMapValue(node, "onFunctionOutput"); v != nil {
-		sb.WriteString(fmt.Sprintf("    onFunctionOutput = %q\n", v.Value))
+		sb.WriteString(fmt.Sprintf("    onFunctionOutput = %s\n", d.formatString(v.Value)))
 	}
 	if v := d.getMapValue(node, "onFunctionInput"); v != nil {
-		sb.WriteString(fmt.Sprintf("    onFunctionInput = %q\n", v.Value))
+		sb.WriteString(fmt.Sprintf("    onFunctionInput = %s\n", d.formatString(v.Value)))
 	}
 	if v := d.getMapValue(node, "onResource"); v != nil {
-		sb.WriteString(fmt.Sprintf("    onResource = %q\n", v.Value))
+		sb.WriteString(fmt.Sprintf("    onResource = %s\n", d.formatString(v.Value)))
 	}
 	if v := d.getMapValue(node, "jmesPath"); v != nil {
-		sb.WriteString(fmt.Sprintf("    jmesPath = %q\n", v.Value))
+		sb.WriteString(fmt.Sprintf("    jmesPath = %s\n", d.formatString(v.Value)))
 	}
 	if v := d.getMapValue(node, "parser"); v != nil {
 		val := v.Value
 		if val == "json" || val == "csv" {
 			sb.WriteString(fmt.Sprintf("    parser = %s\n", val))
 		} else {
-			sb.WriteString(fmt.Sprintf("    parser = %q\n", val))
+			sb.WriteString(fmt.Sprintf("    parser = %s\n", d.formatString(val)))
 		}
 	}
 	if v := d.getMapValue(node, "code"); v != nil {
@@ -362,11 +358,11 @@ func (d *Decompiler) writeTransformer(sb *strings.Builder, node *yaml.Node) erro
 func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessNode *yaml.Node, schemas []sessionProp, requiredProps map[string]bool) error {
 	d.writeBlockComment(sb, keyNode.HeadComment, "")
 	name := keyNode.Value
-	sb.WriteString(fmt.Sprintf("session(%q", name))
+	sb.WriteString(fmt.Sprintf("session(%s", d.formatString(name)))
 
 	if len(schemas) == 1 {
 		if schemas[0].Name != name {
-			sb.WriteString(fmt.Sprintf(", target=%q", schemas[0].Name))
+			sb.WriteString(fmt.Sprintf(", target=%s", d.formatString(schemas[0].Name)))
 		}
 	}
 
@@ -375,7 +371,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 		for _, depNode := range deps.Content {
 			s := d.getMapValue(depNode, "session")
 			if s != nil {
-				sb.WriteString(fmt.Sprintf(", after=%q", s.Value))
+				sb.WriteString(fmt.Sprintf(", after=%s", d.formatString(s.Value)))
 			}
 			e := d.getMapValue(depNode, "expression")
 			if e != nil {
@@ -436,7 +432,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 						if j > 0 {
 							sb.WriteString(", ")
 						}
-						sb.WriteString(fmt.Sprintf("%q", item.Value))
+						sb.WriteString(d.formatString(item.Value))
 					}
 					sb.WriteString("]\n")
 					sb.WriteString("    }\n")
@@ -458,7 +454,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 				continue
 			}
 			d.writeBlockComment(sb, rNode.HeadComment, "    ")
-			sb.WriteString(fmt.Sprintf("    resource %q", idNode.Value))
+			sb.WriteString(fmt.Sprintf("    resource %s", d.formatString(idNode.Value)))
 
 			in := d.getMapValue(rNode, "in")
 			target := d.getMapValue(rNode, "var")
@@ -579,7 +575,7 @@ func (d *Decompiler) writeCall(sb *strings.Builder, cNode *yaml.Node, indent str
 		return fmt.Errorf("call node missing 'name'")
 	}
 	cName := cNameNode.Value
-	sb.WriteString(fmt.Sprintf("%scall(%q)", indent, cName))
+	sb.WriteString(fmt.Sprintf("%scall(%s)", indent, d.formatString(cName)))
 
 	in := d.getMapValue(cNode, "in")
 	target := d.getMapValue(cNode, "var")
@@ -758,6 +754,13 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 	}
 }
 
+func (d *Decompiler) formatString(val string) string {
+	if strings.Contains(val, "\n") && !strings.Contains(val, "`") {
+		return "`" + val + "`"
+	}
+	return fmt.Sprintf("%q", val)
+}
+
 func (d *Decompiler) formatKey(key string) string {
 	// If it matches IDENTIFIER [a-zA-Z_][a-zA-Z0-9_-]*, no quotes needed.
 	// Otherwise, use %q.
@@ -787,7 +790,7 @@ func (d *Decompiler) formatValue(n *yaml.Node) string {
 			return n.Value
 		}
 		if n.Tag == "!!str" {
-			return fmt.Sprintf("%q", n.Value)
+			return d.formatString(n.Value)
 		}
 		if n.Tag == "!!bool" || n.Tag == "!!int" || n.Tag == "!!float" {
 			return n.Value

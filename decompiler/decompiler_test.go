@@ -876,3 +876,38 @@ func TestDecompiler_ScriptComponent(t *testing.T) {
 	y2, _ := yaml.Marshal(planYAML2)
 	assert.Equal(t, string(y1), string(y2))
 }
+
+func TestDecompiler_MultilineStringBackticks(t *testing.T) {
+	input := `
+parameter("param_name", type=string, title=` + "`" + `A multi-line
+title` + "`" + `)
+
+session("s") {
+    - Prompt
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Since the title was multi-line, it should decompile back to backticks
+	assert.Contains(t, output, "title=`A multi-line\ntitle`")
+
+	// Round-trip
+	plan2, err := p.ParseString("roundtrip.frags", output)
+	assert.NoError(t, err)
+	comp2 := compiler.New(plan2)
+	planYAML2, err := comp2.Compile()
+	assert.NoError(t, err)
+
+	y1, _ := yaml.Marshal(planYAML)
+	y2, _ := yaml.Marshal(planYAML2)
+	assert.Equal(t, string(y1), string(y2))
+}

@@ -374,3 +374,50 @@ components {
 	assert.Equal(t, "int", *scriptComp.Parameters.Entries[1].Type.Base.Scalar)
 	assert.Contains(t, scriptComp.Body, "some script code goes here")
 }
+
+func TestParser_StringMultilineBackticks(t *testing.T) {
+	p, err := NewParser()
+	assert.NoError(t, err)
+
+	input := `
+parameter(` + "`" + `param_name` + "`" + `, type=string, title=` + "`" + `A multi-line
+title` + "`" + `)
+
+session(` + "`" + `session_name` + "`" + `) {
+	resource ` + "`" + `some_resource.txt` + "`" + `
+	schema {
+		` + "`" + `field_name` + "`" + `?: string
+	}
+}
+
+components {
+	schema(` + "`" + `SchemaName` + "`" + `) {
+		value: ` + "`" + `enum1` + "`" + ` | ` + "`" + `enum2` + "`" + `
+	}
+	prompt(` + "`" + `PromptName` + "`" + `) {
+		` + "`" + `Prompt Value` + "`" + `
+	}
+}
+`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	assert.NotNil(t, plan)
+
+	// parameter
+	param := plan.Statements[0].Parameter
+	assert.Equal(t, "param_name", param.Name)
+	assert.Equal(t, "A multi-line\ntitle", *param.Attributes[1].Title)
+
+	// session
+	sess := plan.Statements[1].Session
+	assert.Equal(t, "session_name", sess.Name)
+	assert.Equal(t, "some_resource.txt", sess.Statements[0].Resource.Identifier)
+	assert.Equal(t, "field_name", sess.Statements[1].Schema.Type.Base.Object.Fields[0].Name)
+
+	// components
+	comps := plan.Statements[2].Components
+	assert.Equal(t, "SchemaName", comps.Items[0].Schema.Name)
+	assert.Equal(t, []string{"enum1", "enum2"}, comps.Items[0].Schema.Fields[0].Type.Base.Enum)
+	assert.Equal(t, "PromptName", comps.Items[1].Prompt.Name)
+	assert.Equal(t, "Prompt Value", comps.Items[1].Prompt.Value)
+}

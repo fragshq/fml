@@ -65,6 +65,16 @@ func TestParser_CallCode(t *testing.T) {
 	assert.Contains(t, code, "args.x.map")
 }
 
+func TestParser_CallKbs(t *testing.T) {
+	p, _ := NewParser()
+	input := `call("test") { kbs( my_kb_id ) }`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+
+	kbs := *plan.Statements[0].Call.Fields[0].Kbs
+	assert.Contains(t, kbs, "my_kb_id")
+}
+
 func TestParser_EnumTypes(t *testing.T) {
 	p, _ := NewParser()
 	input := `parameter("status", type="up"|"down"|pending)`
@@ -334,4 +344,80 @@ session("gather") {
 	assert.Equal(t, "bool", *fields[0].Type.Base.Scalar)
 	assert.Equal(t, "f2", fields[1].Name)
 	assert.Equal(t, "boolean", *fields[1].Type.Base.Scalar)
+}
+
+func TestParser_ScriptComponent(t *testing.T) {
+	p, err := NewParser()
+	assert.NoError(t, err)
+
+	input := `
+components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string, arg2: int}) (
+		some script code goes here
+	)
+}
+`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	assert.NotNil(t, plan)
+
+	scriptComp := plan.Statements[0].Components.Items[0].Script
+	assert.NotNil(t, scriptComp)
+	assert.Equal(t, "my_script", scriptComp.Name)
+	assert.Equal(t, "kbs", scriptComp.Type)
+	assert.Equal(t, "some description", *scriptComp.Description)
+	assert.NotNil(t, scriptComp.Parameters)
+	assert.Len(t, scriptComp.Parameters.Entries, 2)
+	assert.Equal(t, "arg1", scriptComp.Parameters.Entries[0].Name)
+	assert.Equal(t, "string", *scriptComp.Parameters.Entries[0].Type.Base.Scalar)
+	assert.Equal(t, "arg2", scriptComp.Parameters.Entries[1].Name)
+	assert.Equal(t, "int", *scriptComp.Parameters.Entries[1].Type.Base.Scalar)
+	assert.Contains(t, scriptComp.Body, "some script code goes here")
+}
+
+func TestParser_StringMultilineBackticks(t *testing.T) {
+	p, err := NewParser()
+	assert.NoError(t, err)
+
+	input := `
+parameter(` + "`" + `param_name` + "`" + `, type=string, title=` + "`" + `A multi-line
+title` + "`" + `)
+
+session(` + "`" + `session_name` + "`" + `) {
+	resource ` + "`" + `some_resource.txt` + "`" + `
+	schema {
+		` + "`" + `field_name` + "`" + `?: string
+	}
+}
+
+components {
+	schema(` + "`" + `SchemaName` + "`" + `) {
+		value: ` + "`" + `enum1` + "`" + ` | ` + "`" + `enum2` + "`" + `
+	}
+	prompt(` + "`" + `PromptName` + "`" + `) {
+		` + "`" + `Prompt Value` + "`" + `
+	}
+}
+`
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	assert.NotNil(t, plan)
+
+	// parameter
+	param := plan.Statements[0].Parameter
+	assert.Equal(t, "param_name", param.Name)
+	assert.Equal(t, "A multi-line\ntitle", *param.Attributes[1].Title)
+
+	// session
+	sess := plan.Statements[1].Session
+	assert.Equal(t, "session_name", sess.Name)
+	assert.Equal(t, "some_resource.txt", sess.Statements[0].Resource.Identifier)
+	assert.Equal(t, "field_name", sess.Statements[1].Schema.Type.Base.Object.Fields[0].Name)
+
+	// components
+	comps := plan.Statements[2].Components
+	assert.Equal(t, "SchemaName", comps.Items[0].Schema.Name)
+	assert.Equal(t, []string{"enum1", "enum2"}, comps.Items[0].Schema.Fields[0].Type.Base.Enum)
+	assert.Equal(t, "PromptName", comps.Items[1].Prompt.Name)
+	assert.Equal(t, "Prompt Value", comps.Items[1].Prompt.Value)
 }

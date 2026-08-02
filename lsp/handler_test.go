@@ -7,6 +7,7 @@ import (
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/theirish81/fml/parser"
 )
 
 func TestFMLHandler_Initialize(t *testing.T) {
@@ -291,6 +292,7 @@ func TestFMLHandler_Completion_ComponentsContext(t *testing.T) {
 
 	hasSchema := false
 	hasPrompt := false
+	hasScript := false
 	for _, item := range resp.Items {
 		if item.Label == "schema" {
 			hasSchema = true
@@ -298,9 +300,13 @@ func TestFMLHandler_Completion_ComponentsContext(t *testing.T) {
 		if item.Label == "prompt" {
 			hasPrompt = true
 		}
+		if item.Label == "script" {
+			hasScript = true
+		}
 	}
 	assert.True(t, hasSchema, "Should suggest 'schema' in components")
 	assert.True(t, hasPrompt, "Should suggest 'prompt' in components")
+	assert.True(t, hasScript, "Should suggest 'script' in components")
 }
 
 func TestFMLHandler_Hover(t *testing.T) {
@@ -330,6 +336,15 @@ func TestFMLHandler_Hover(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Contains(t, resp.Contents.Value, "Restricts a parameter or field")
+
+	// Test "script" hover
+	params.Position.Character = 0
+	handler.documents[uri] = "script"
+	params.Position.Character = 2 // inside "script"
+	resp, err = handler.Hover(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Contains(t, resp.Contents.Value, "Defines a reusable script component")
 }
 
 func TestFMLHandler_SemanticTokens(t *testing.T) {
@@ -381,4 +396,311 @@ func TestFMLHandler_SemanticTokens(t *testing.T) {
 
 	assert.True(t, foundPromptStart, "Should find the first line of the prompt at correct offset")
 	assert.True(t, foundContinuation, "Should find the continuation line of the prompt at correct offset (indented)")
+}
+
+func TestFMLHandler_Completion_CallContext(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: "session(\"s\") {\n  call(\"kb_tool\") {\n    \n  }\n}",
+	}
+
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 2, Character: 4},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	assert.NoError(t, err)
+
+	hasKbs := false
+	hasCode := false
+	hasAllowlist := false
+	for _, item := range resp.Items {
+		if item.Label == "kbs" {
+			hasKbs = true
+		}
+		if item.Label == "code" {
+			hasCode = true
+		}
+		if item.Label == "allowlist =" {
+			hasAllowlist = true
+		}
+	}
+
+	assert.True(t, hasKbs, "Should suggest 'kbs' inside call block")
+	assert.True(t, hasCode, "Should suggest 'code' inside call block")
+	assert.False(t, hasAllowlist, "Should NOT suggest 'allowlist =' inside call block")
+}
+
+func TestFMLHandler_Diagnostics_ScriptComponent(t *testing.T) {
+	p, err := parser.NewParser()
+	assert.NoError(t, err)
+
+	// Case 1: Valid script parses without errors
+	validInput := `components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string}) (
+		some script code goes here
+	)
+}`
+	_, err = p.ParseString("file:///test.fml", validInput)
+	assert.NoError(t, err)
+
+	// Case 2: Invalid script (unclosed parenthesis in script body) produces a diagnostic syntax error
+	invalidInput := `components {
+	script("my_script", type="kbs", description="some description", parameters={arg1: string}) (
+		some script code goes here
+}`
+	_, err = p.ParseString("file:///test.fml", invalidInput)
+	assert.Error(t, err)
+
+	pos, msg, ok := parser.ErrorPosition(err)
+	assert.True(t, ok)
+	// The lexer fails on the unclosed balanced block starting at the body content (line 3, column 3)
+	assert.Equal(t, 3, pos.Line)
+	assert.Equal(t, 3, pos.Column)
+	assert.Contains(t, msg, "unclosed balanced block (missing ')')")
+}
+
+func TestFMLHandler_SemanticTokens_RawStrings(t *testing.T) {
+	handler := &FMLHandler{
+		documents: make(map[lsp.DocumentURI]string),
+	}
+	uri := lsp.DocumentURI("file:///test.fml")
+
+	fml := "system(`\n  line 1\n  line 2\n`)"
+	handler.documents[uri] = fml
+
+	params := &lsp.SemanticTokensParams{
+		TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+	}
+
+	resp, err := handler.SemanticTokensFull(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	foundRawStringToken := false
+	for i := 0; i < len(resp.Data); i += 5 {
+		tokenType := resp.Data[i+3]
+		if tokenType == 1 {
+			foundRawStringToken = true
+			break
+		}
+	}
+	assert.True(t, foundRawStringToken, "Should find semantic tokens for raw backtick strings")
+}
+
+func TestFMLHandler_Completion_Backticks(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: "parameter(`p`, \n",
+	}
+
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 0, Character: 15}, // after "parameter(`p`, "
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	foundEnum := false
+	for _, item := range resp.Items {
+		if item.Label == "enum=" {
+			foundEnum = true
+			break
+		}
+	}
+	assert.True(t, foundEnum, "Should find 'enum=' completion for parameter even when parameter name uses backticks")
+}
+
+func TestFMLHandler_Completion_ScriptBody(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: `components {
+  script("my_script", type="kbs", description="some description", parameters={arg1: string}) (
+    
+  )
+}`,
+	}
+
+	// Position 2, Col 4 (inside the script's parentheses)
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 2, Character: 4},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Empty(t, resp.Items, "Should have no keyword suggestions inside script parenthesis body")
+}
+
+func TestFMLHandler_Completion_CommentSkipping(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: `session("s") {
+  use search
+# non-indented comment
+  
+}`,
+	}
+
+	// Position 3, Col 2 (indented blank line inside session block)
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 3, Character: 2},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	// Since we are inside session, we should get session keywords (like call)
+	hasCall := false
+	for _, item := range resp.Items {
+		if item.Label == "call" {
+			hasCall = true
+			break
+		}
+	}
+	assert.True(t, hasCall, "Should suggest session-level keywords (e.g., 'call') even after non-indented comment line")
+}
+
+func TestFMLHandler_Completion_ScriptAttributes(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: `components {
+  script("my_script", 
+}`,
+	}
+
+	// Character 22 is after 'script("my_script", '
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 1, Character: 22},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	hasType := false
+	hasDescription := false
+	hasParameters := false
+	hasPromptComponentKeyword := false
+
+	for _, item := range resp.Items {
+		if item.Label == "type=" {
+			hasType = true
+		}
+		if item.Label == "description=" {
+			hasDescription = true
+		}
+		if item.Label == "parameters=" {
+			hasParameters = true
+		}
+		if item.Label == "prompt" {
+			hasPromptComponentKeyword = true
+		}
+	}
+
+	assert.True(t, hasType, "Should suggest 'type=' inside script parentheses")
+	assert.True(t, hasDescription, "Should suggest 'description=' inside script parentheses")
+	assert.True(t, hasParameters, "Should suggest 'parameters=' inside script parentheses")
+	assert.False(t, hasPromptComponentKeyword, "Should NOT suggest 'prompt' component block keyword inside script parentheses")
+}
+
+func TestFMLHandler_Completion_AfterClosedBlock(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: `components {
+  schema("my_schema") {
+    field: string
+  }
+  
+}`,
+	}
+
+	// Line 4 is a blank line indented by 2 spaces, after the closed schema block but still inside components block
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 4, Character: 2},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	hasSchema := false
+	hasPrompt := false
+	hasScript := false
+
+	for _, item := range resp.Items {
+		if item.Label == "schema" {
+			hasSchema = true
+		}
+		if item.Label == "prompt" {
+			hasPrompt = true
+		}
+		if item.Label == "script" {
+			hasScript = true
+		}
+	}
+
+	assert.True(t, hasSchema, "Should suggest 'schema' inside components block even after a closed nested block")
+	assert.True(t, hasPrompt, "Should suggest 'prompt' inside components block even after a closed nested block")
+	assert.True(t, hasScript, "Should suggest 'script' inside components block even after a closed nested block")
+}
+
+func TestFMLHandler_Completion_GlobalCallArguments(t *testing.T) {
+	handler := &FMLHandler{}
+	uri := lsp.DocumentURI("file:///test.fml")
+	handler.documents = map[lsp.DocumentURI]string{
+		uri: `call(`,
+	}
+
+	// Character 5 is inside 'call('
+	params := &lsp.CompletionParams{
+		TextDocumentPositionParams: lsp.TextDocumentPositionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: 0, Character: 5},
+		},
+	}
+
+	resp, err := handler.Completion(context.Background(), params)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	hasSystem := false
+	hasComponents := false
+	for _, item := range resp.Items {
+		if item.Label == "system" {
+			hasSystem = true
+		}
+		if item.Label == "components" {
+			hasComponents = true
+		}
+	}
+
+	assert.False(t, hasSystem, "Should NOT suggest 'system' keyword inside global call arguments")
+	assert.False(t, hasComponents, "Should NOT suggest 'components' keyword inside global call arguments")
 }

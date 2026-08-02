@@ -36,7 +36,7 @@ type SystemBlock struct {
 
 type ParameterBlock struct {
 	LeadingComments []string         `@Comment*`
-	Name            string           `"parameter" "(" @String`
+	Name            string           `"parameter" "(" (@String | @RawString)`
 	Attributes      []*ParameterAttr `("," @@)* ")" `
 	InlineComment   *string          `@InlineComment?`
 }
@@ -44,28 +44,28 @@ type ParameterBlock struct {
 type ParameterAttr struct {
 	Type    *TypeExpr `( "type" "=" @@`
 	Default *Value    `| "default" "=" @@`
-	Title   *string   `| "title" "=" @String`
+	Title   *string   `| "title" "=" (@String | @RawString)`
 	Enum    *TypeExpr `| "enum" "=" @@ )`
 }
 
 type TransformerBlock struct {
-	Name          string              `"transformer" "(" @String ")" "{"`
+	Name          string              `"transformer" "(" (@String | @RawString) ")" "{"`
 	InlineComment *string             `@InlineComment?`
 	Fields        []*TransformerField `@@* "}"`
 }
 
 type TransformerField struct {
 	TriggerType   *string `(@("onFunctionOutput" | "onFunctionInput" | "onResource")`
-	TriggerValue  *string `"=" @String)`
-	JMESPath      *string `| ("jmesPath" "=" @String)`
-	Parser        *string `| ("parser" "=" @("json" | "csv" | String))`
+	TriggerValue  *string `"=" (@String | @RawString))`
+	JMESPath      *string `| ("jmesPath" "=" (@String | @RawString))`
+	Parser        *string `| ("parser" "=" @("json" | "csv" | String | RawString))`
 	Code          *string `| ("code" "(" @CodeValue ")")`
 	InlineComment *string `@InlineComment?`
 }
 
 // CallBlock represents a function or tool invocation, mapping inputs to an optional variable.
 type CallBlock struct {
-	Name          string       `"call" "(" @String ")"`
+	Name          string       `"call" "(" (@String | @RawString) ")"`
 	Target        *CallTarget  `("->" @@)?`
 	InlineComment *string      `@InlineComment?`
 	Fields        []*CallField `("{" @@* "}")?`
@@ -78,7 +78,8 @@ type CallTarget struct {
 
 type CallField struct {
 	Code          *string `("code" "(" @CodeValue ")"`
-	Ident         *string `| (@Ident | @String) "="`
+	Kbs           *string `| "kbs" "(" @CodeValue ")"`
+	Ident         *string `| (@Ident | @String | @RawString) "="`
 	Value         *Value  `@@)`
 	InlineComment *string `@InlineComment?`
 }
@@ -90,7 +91,7 @@ type SetStmt struct {
 }
 
 type Value struct {
-	String *string     `@String`
+	String *string     `(@String | @RawString)`
 	Number *float64    `| @Number`
 	Bool   *bool       `| @Bool`
 	Expr   *string     `| "$(" @CodeValue ")"`
@@ -107,7 +108,7 @@ type MapValue struct {
 }
 
 type MapEntry struct {
-	Key   string `(@Ident | @String) ":"`
+	Key   string `(@Ident | @String | @RawString) ":"`
 	Value *Value `@@`
 }
 
@@ -118,25 +119,45 @@ type ComponentsBlock struct {
 type ComponentItem struct {
 	Schema *SchemaComponent `@@`
 	Prompt *PromptComponent `| @@`
+	Script *ScriptComponent `| @@`
 }
 
 type SchemaComponent struct {
 	LeadingComments []string       `@Comment*`
-	Name            string         `"schema" "(" @String ")" "{"`
+	Name            string         `"schema" "(" (@String | @RawString) ")" "{"`
 	Fields          []*SchemaField `(@@ (","? @@)*)? "}"`
 	InlineComment   *string        `@InlineComment?`
 }
 
 type PromptComponent struct {
 	LeadingComments []string `@Comment*`
-	Name            string   `"prompt" "(" @String ")" "{"`
-	Value           string   `@String "}"`
+	Name            string   `"prompt" "(" (@String | @RawString) ")" "{"`
+	Value           string   `(@String | @RawString) "}"`
 	InlineComment   *string  `@InlineComment?`
+}
+
+type ScriptComponent struct {
+	LeadingComments []string      `@Comment*`
+	Name            string        `"script" "(" (@String | @RawString)`
+	Type            string        `"," "type" "=" (@String | @RawString)`
+	Description     *string       `("," "description" "=" (@String | @RawString))?`
+	Parameters      *ScriptParams `("," "parameters" "=" @@)? ")"`
+	Body            string        `"(" @CodeValue ")"`
+	InlineComment   *string       `@InlineComment?`
+}
+
+type ScriptParams struct {
+	Entries []*ScriptParamEntry `"{" (@@ (","? @@)*)? "}"`
+}
+
+type ScriptParamEntry struct {
+	Name string    `(@Ident | @String | @RawString) ":"`
+	Type *TypeExpr `@@`
 }
 
 // SessionBlock represents a logical pipeline step with its own context, tools, and output schema.
 type SessionBlock struct {
-	Name          string         `"session" "(" @String`
+	Name          string         `"session" "(" (@String | @RawString)`
 	Attributes    []*SessionAttr `@@* ")" "{"`
 	InlineComment *string        `@InlineComment?`
 	Statements    []*SessionStmt `@@* "}"`
@@ -145,7 +166,7 @@ type SessionBlock struct {
 // SessionAttr handles session configuration such as dependencies (after/expect), iteration, or schema target renaming.
 type SessionAttr struct {
 	Type  string `"," @("after" | "expect" | "iterate" | "target") "="`
-	Value string `(@String | @AttrValue)`
+	Value string `(@String | @RawString | @AttrValue)`
 }
 
 type SessionStmt struct {
@@ -160,7 +181,7 @@ type SessionStmt struct {
 }
 
 type ResourceStmt struct {
-	Identifier    string      `"resource" @String`
+	Identifier    string      `"resource" (@String | @RawString)`
 	Target        *CallTarget `("->" @@)?`
 	InlineComment *string     `@InlineComment?`
 }
@@ -174,7 +195,7 @@ type UseStmt struct {
 }
 
 type UseField struct {
-	Allowlist []string `"allowlist" "=" "[" @String ("," @String)* "]"`
+	Allowlist []string `"allowlist" "=" "[" (@String | @RawString) ("," (@String | @RawString))* "]"`
 }
 
 type ContextStmt struct {
@@ -202,7 +223,7 @@ type SchemaBlock struct {
 
 type SchemaField struct {
 	LeadingComments []string  `@Comment*`
-	Name            string    `(@Ident | @String)`
+	Name            string    `(@Ident | @String | @RawString)`
 	Optional        bool      `@("?")? ":"`
 	Type            *TypeExpr `@@`
 	InlineComment   *string   `@InlineComment?`
@@ -218,7 +239,7 @@ type TypeBase struct {
 	Scalar *string     `@("string" | "int" | "float" | "bool" | "boolean" | "any")`
 	Object *ObjectBody `| @@`
 	Ref    *string     `| "$" @Ident`
-	Enum   []string    `| (@(Ident|String) ("|" @(Ident|String))* )`
+	Enum   []string    `| (@(Ident|String|RawString) ("|" @(Ident|String|RawString))* )`
 }
 
 type ObjectBody struct {

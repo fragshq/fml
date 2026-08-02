@@ -504,7 +504,7 @@ func (d *Decompiler) writeSession(sb *strings.Builder, keyNode *yaml.Node, sessN
 				sb.WriteString("\n")
 			} else {
 				// Avoid writing default session schemas (previously empty object, now string)
-				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" && len(s.Extensions) == 0 {
+				if (s.Type == parser.TypeObject || s.Type == parser.TypeString) && len(s.Properties) == 0 && s.Ref == "" && len(s.Enum) == 0 && s.Description == "" && len(s.Extensions) == 0 && len(s.GetSchemaQualities()) == 0 {
 					continue
 				}
 
@@ -604,7 +604,9 @@ func (d *Decompiler) writeSchemaFields(sb *strings.Builder, s *compiler.JSONSche
 	for _, name := range keys {
 		prop := s.Properties[name]
 		hasLeading := false
-		if len(prop.Extensions) > 0 || (prop.Description != "" && (strings.Contains(prop.Description, "\n") || strings.Contains(indent, "\n"))) {
+		qualities := prop.GetSchemaQualities()
+		hasAnnos := len(prop.Extensions) > 0 || len(qualities) > 0
+		if hasAnnos || (prop.Description != "" && (strings.Contains(prop.Description, "\n") || strings.Contains(indent, "\n"))) {
 			hasLeading = d.writeSchemaFieldComments(sb, prop, indent)
 		}
 		sb.WriteString(fmt.Sprintf("%s%s", indent, d.formatKey(name)))
@@ -681,7 +683,9 @@ func (d *Decompiler) formatType(s *compiler.JSONSchema, indent string) (string, 
 		for _, name := range keys {
 			prop := s.Properties[name]
 			hasLeading := false
-			if len(prop.Extensions) > 0 || (prop.Description != "" && strings.Contains(prop.Description, "\n")) {
+			qualities := prop.GetSchemaQualities()
+			hasAnnos := len(prop.Extensions) > 0 || len(qualities) > 0
+			if hasAnnos || (prop.Description != "" && strings.Contains(prop.Description, "\n")) {
 				var cSb strings.Builder
 				d.writeSchemaFieldComments(&cSb, prop, newIndent)
 				sb.WriteString(cSb.String())
@@ -815,21 +819,32 @@ func (d *Decompiler) writeBlockComment(sb *strings.Builder, comment string, inde
 
 func (d *Decompiler) writeSchemaFieldComments(sb *strings.Builder, s *compiler.JSONSchema, indent string) bool {
 	hasLeading := false
-	if s.Description != "" && (strings.Contains(s.Description, "\n") || len(s.Extensions) > 0) {
+	qualities := s.GetSchemaQualities()
+	hasAnnos := len(s.Extensions) > 0 || len(qualities) > 0
+
+	if s.Description != "" && (strings.Contains(s.Description, "\n") || hasAnnos) {
 		lines := strings.Split(s.Description, "\n")
 		for _, line := range lines {
 			sb.WriteString(fmt.Sprintf("%s# %s\n", indent, line))
 		}
 		hasLeading = true
 	}
-	if len(s.Extensions) > 0 {
-		keys := make([]string, 0, len(s.Extensions))
-		for k := range s.Extensions {
+	if hasAnnos {
+		allAnnos := make(map[string]interface{})
+		for k, v := range s.Extensions {
+			allAnnos[k] = v
+		}
+		for k, v := range qualities {
+			allAnnos[k] = v
+		}
+
+		keys := make([]string, 0, len(allAnnos))
+		for k := range allAnnos {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			val := s.Extensions[k]
+			val := allAnnos[k]
 			formatted := compiler.FormatAnnotation(k, val)
 			lines := strings.Split(formatted, "\n")
 			for _, line := range lines {

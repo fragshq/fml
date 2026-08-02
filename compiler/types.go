@@ -143,15 +143,26 @@ func (c *ComponentsYAML) UnmarshalYAML(value *yaml.Node) error {
 
 // JSONSchema node with comment support for fields that aren't description-driven.
 type JSONSchema struct {
-	Type        string                 `yaml:"type,omitempty"`
-	Title       string                 `yaml:"title,omitempty"`
-	Description string                 `yaml:"description,omitempty"`
-	Default     interface{}            `yaml:"default,omitempty"`
-	Properties  map[string]*JSONSchema `yaml:"properties,omitempty"`
-	Required    []string               `yaml:"required,omitempty"`
-	Items       *JSONSchema            `yaml:"items,omitempty"`
-	Enum        []interface{}          `yaml:"enum,omitempty"`
-	Ref         string                 `yaml:"$ref,omitempty"`
-	XSession    string                 `yaml:"x-session,omitempty"`
-	Extensions  map[string]interface{} `yaml:",inline"`
+	Type             string                 `yaml:"type,omitempty"`
+	Title            string                 `yaml:"title,omitempty"`
+	Description      string                 `yaml:"description,omitempty"`
+	Default          interface{}            `yaml:"default,omitempty"`
+	Properties       map[string]*JSONSchema `yaml:"properties,omitempty"`
+	Required         []string               `yaml:"required,omitempty"`
+	Items            *JSONSchema            `yaml:"items,omitempty"`
+	Enum             []interface{}          `yaml:"enum,omitempty"`
+	Ref              string                 `yaml:"$ref,omitempty"`
+	XSession         string                 `yaml:"x-session,omitempty"`
+	Minimum          *float64               `yaml:"minimum,omitempty"`
+	Maximum          *float64               `yaml:"maximum,omitempty"`
+	ExclusiveMinimum *float64               `yaml:"exclusiveMinimum,omitempty"`
+	ExclusiveMaximum *float64               `yaml:"exclusiveMaximum,omitempty"`
+	MinLength        *int                   `yaml:"minLength,omitempty"`
+	MaxLength        *int                   `yaml:"maxLength,omitempty"`
+	Pattern          string                 `yaml:"pattern,omitempty"`
+	Format           string                 `yaml:"format,omitempty"`
+	MinItems         *int                   `yaml:"minItems,omitempty"`
+	MaxItems         *int                   `yaml:"maxItems,omitempty"`
+	UniqueItems      *bool                  `yaml:"uniqueItems,omitempty"`
+	Extensions       map[string]interface{} `yaml:",inline"`
 }

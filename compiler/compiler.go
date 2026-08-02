@@ -907,11 +907,20 @@ func (c *Compiler) resolveDescriptionAndAnnotations(leading []string, inline *st
 	// Parse annotations and get remaining comments (which form the description)
 	extensions, remainingComments := ParseAnnotations(leading)
 	if len(extensions) > 0 {
-		if schema.Extensions == nil {
-			schema.Extensions = make(map[string]interface{})
-		}
 		for k, v := range extensions {
-			schema.Extensions[k] = v
+			if strings.HasPrefix(k, "x-") {
+				if schema.Extensions == nil {
+					schema.Extensions = make(map[string]interface{})
+				}
+				schema.Extensions[k] = v
+			} else {
+				if !schema.SetSchemaQuality(k, v) {
+					if schema.Extensions == nil {
+						schema.Extensions = make(map[string]interface{})
+					}
+					schema.Extensions[k] = v
+				}
+			}
 		}
 	}
 
@@ -937,11 +946,20 @@ func (c *Compiler) flushRootAnnotations(rootSchema *JSONSchema) {
 	}
 	extensions, remaining := ParseAnnotations(c.pendingComments)
 	if len(extensions) > 0 {
-		if rootSchema.Extensions == nil {
-			rootSchema.Extensions = make(map[string]interface{})
-		}
 		for k, v := range extensions {
-			rootSchema.Extensions[k] = v
+			if strings.HasPrefix(k, "x-") {
+				if rootSchema.Extensions == nil {
+					rootSchema.Extensions = make(map[string]interface{})
+				}
+				rootSchema.Extensions[k] = v
+			} else {
+				if !rootSchema.SetSchemaQuality(k, v) {
+					if rootSchema.Extensions == nil {
+						rootSchema.Extensions = make(map[string]interface{})
+					}
+					rootSchema.Extensions[k] = v
+				}
+			}
 		}
 	}
 	c.pendingComments = remaining

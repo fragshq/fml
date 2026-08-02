@@ -809,3 +809,43 @@ session("gather") {
 	require.NotNil(t, resultField)
 	assert.Equal(t, true, resultField.Extensions["x-ui-hidden"])
 }
+
+func TestCompiler_StandardQualities(t *testing.T) {
+	input := `
+session("validate") {
+    schema {
+        # @min = 18
+        # @max = 100
+        # @title = "User Age"
+        age: int
+
+        # @enum = ["admin", "user"]
+        # @default = "user"
+        # @pattern = "^[a-z]+$"
+        role: string
+    }
+}
+`
+	out, err := compileSource(t, input)
+	assert.NoError(t, err)
+	assert.NotNil(t, out)
+
+	var schema JSONSchema
+	err = out.Schema.Decode(&schema)
+	assert.NoError(t, err)
+
+	validateSchema := schema.Properties["validate"]
+	require.NotNil(t, validateSchema)
+
+	ageField := validateSchema.Properties["age"]
+	require.NotNil(t, ageField)
+	assert.Equal(t, 18.0, *ageField.Minimum)
+	assert.Equal(t, 100.0, *ageField.Maximum)
+	assert.Equal(t, "User Age", ageField.Title)
+
+	roleField := validateSchema.Properties["role"]
+	require.NotNil(t, roleField)
+	assert.Equal(t, []interface{}{"admin", "user"}, roleField.Enum)
+	assert.Equal(t, "user", roleField.Default)
+	assert.Equal(t, "^[a-z]+$", roleField.Pattern)
+}

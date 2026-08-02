@@ -441,3 +441,230 @@ func FormatAnnotationValue(val interface{}, indent string) string {
 func FormatAnnotation(key string, val interface{}) string {
 	return fmt.Sprintf("@%s = %s", key, FormatAnnotationValue(val, ""))
 }
+
+// SetSchemaQuality sets a standard schema quality on a JSONSchema from an annotation key and value.
+// Returns true if the key was a known standard quality and was handled, false otherwise.
+func (schema *JSONSchema) SetSchemaQuality(key string, val interface{}) bool {
+	normKey := strings.ToLower(strings.ReplaceAll(key, "_", ""))
+	switch normKey {
+	case "title":
+		if s, ok := val.(string); ok {
+			schema.Title = s
+		} else {
+			schema.Title = fmt.Sprintf("%v", val)
+		}
+		return true
+	case "description":
+		if s, ok := val.(string); ok {
+			schema.Description = s
+		} else {
+			schema.Description = fmt.Sprintf("%v", val)
+		}
+		return true
+	case "default":
+		schema.Default = val
+		return true
+	case "enum":
+		if slice, ok := val.([]interface{}); ok {
+			schema.Enum = slice
+		} else if slice, ok := val.([]string); ok {
+			var iSlice []interface{}
+			for _, s := range slice {
+				iSlice = append(iSlice, s)
+			}
+			schema.Enum = iSlice
+		} else {
+			schema.Enum = []interface{}{val}
+		}
+		return true
+	case "min", "minimum":
+		var f float64
+		switch v := val.(type) {
+		case int:
+			f = float64(v)
+		case float64:
+			f = v
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%f", &f); err != nil {
+				return false
+			}
+		}
+		schema.Minimum = &f
+		return true
+	case "max", "maximum":
+		var f float64
+		switch v := val.(type) {
+		case int:
+			f = float64(v)
+		case float64:
+			f = v
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%f", &f); err != nil {
+				return false
+			}
+		}
+		schema.Maximum = &f
+		return true
+	case "exclusivemin", "exclusiveminimum":
+		var f float64
+		switch v := val.(type) {
+		case int:
+			f = float64(v)
+		case float64:
+			f = v
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%f", &f); err != nil {
+				return false
+			}
+		}
+		schema.ExclusiveMinimum = &f
+		return true
+	case "exclusivemax", "exclusivemaximum":
+		var f float64
+		switch v := val.(type) {
+		case int:
+			f = float64(v)
+		case float64:
+			f = v
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%f", &f); err != nil {
+				return false
+			}
+		}
+		schema.ExclusiveMaximum = &f
+		return true
+	case "minlength":
+		var i int
+		switch v := val.(type) {
+		case int:
+			i = v
+		case float64:
+			i = int(v)
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%d", &i); err != nil {
+				return false
+			}
+		}
+		schema.MinLength = &i
+		return true
+	case "maxlength":
+		var i int
+		switch v := val.(type) {
+		case int:
+			i = v
+		case float64:
+			i = int(v)
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%d", &i); err != nil {
+				return false
+			}
+		}
+		schema.MaxLength = &i
+		return true
+	case "pattern":
+		if s, ok := val.(string); ok {
+			schema.Pattern = s
+		} else {
+			schema.Pattern = fmt.Sprintf("%v", val)
+		}
+		return true
+	case "format":
+		if s, ok := val.(string); ok {
+			schema.Format = s
+		} else {
+			schema.Format = fmt.Sprintf("%v", val)
+		}
+		return true
+	case "minitems":
+		var i int
+		switch v := val.(type) {
+		case int:
+			i = v
+		case float64:
+			i = int(v)
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%d", &i); err != nil {
+				return false
+			}
+		}
+		schema.MinItems = &i
+		return true
+	case "maxitems":
+		var i int
+		switch v := val.(type) {
+		case int:
+			i = v
+		case float64:
+			i = int(v)
+		default:
+			if _, err := fmt.Sscanf(fmt.Sprintf("%v", val), "%d", &i); err != nil {
+				return false
+			}
+		}
+		schema.MaxItems = &i
+		return true
+	case "uniqueitems":
+		var b bool
+		switch v := val.(type) {
+		case bool:
+			b = v
+		default:
+			s := strings.ToLower(fmt.Sprintf("%v", val))
+			b = s == "true" || s == "1"
+		}
+		schema.UniqueItems = &b
+		return true
+	}
+	return false
+}
+
+// GetSchemaQualities returns standard schema qualities as a map.
+func (schema *JSONSchema) GetSchemaQualities() map[string]interface{} {
+	m := make(map[string]interface{})
+	if schema.Title != "" {
+		m["title"] = schema.Title
+	}
+	if schema.Default != nil {
+		m["default"] = schema.Default
+	}
+	if len(schema.Enum) > 0 {
+		// Only include in qualities if we don't format it as a union type.
+		if schema.Type != "string" && schema.Type != "" {
+			m["enum"] = schema.Enum
+		}
+	}
+	if schema.Minimum != nil {
+		m["minimum"] = *schema.Minimum
+	}
+	if schema.Maximum != nil {
+		m["maximum"] = *schema.Maximum
+	}
+	if schema.ExclusiveMinimum != nil {
+		m["exclusiveMinimum"] = *schema.ExclusiveMinimum
+	}
+	if schema.ExclusiveMaximum != nil {
+		m["exclusiveMaximum"] = *schema.ExclusiveMaximum
+	}
+	if schema.MinLength != nil {
+		m["minLength"] = *schema.MinLength
+	}
+	if schema.MaxLength != nil {
+		m["maxLength"] = *schema.MaxLength
+	}
+	if schema.Pattern != "" {
+		m["pattern"] = schema.Pattern
+	}
+	if schema.Format != "" {
+		m["format"] = schema.Format
+	}
+	if schema.MinItems != nil {
+		m["minItems"] = *schema.MinItems
+	}
+	if schema.MaxItems != nil {
+		m["maxItems"] = *schema.MaxItems
+	}
+	if schema.UniqueItems != nil {
+		m["uniqueItems"] = *schema.UniqueItems
+	}
+	return m
+}

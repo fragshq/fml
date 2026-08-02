@@ -812,3 +812,40 @@ session("gather") {
 	assert.Contains(t, output, `# @x-ui-layout = grid`)
 	assert.Contains(t, output, `# @x-ui-hidden = true`)
 }
+
+func TestDecompiler_StandardQualities(t *testing.T) {
+	input := `session("validate") {
+    schema {
+        # @maximum = 100
+        # @minimum = 18
+        # @title = "User Age"
+        age: int
+        # @default = "user"
+        # @enum = [
+        #   "admin"
+        #   "user"
+        # ]
+        # @pattern = "^[a-z]+$"
+        role: string
+    }
+}
+`
+	p, _ := parser.NewParser()
+	plan, err := p.ParseString("test.frags", input)
+	assert.NoError(t, err)
+	comp := compiler.New(plan)
+	planYAML, err := comp.Compile()
+	assert.NoError(t, err)
+
+	dec := New(planYAML)
+	output, err := dec.Decompile()
+	assert.NoError(t, err)
+
+	// Verify standard qualities are preserved as annotations
+	assert.Contains(t, output, `# @minimum = 18`)
+	assert.Contains(t, output, `# @maximum = 100`)
+	assert.Contains(t, output, `# @title = "User Age"`)
+	assert.Contains(t, output, `# @default = user`)
+	assert.Contains(t, output, `# @pattern = "^[a-z]+$"`)
+	assert.Contains(t, output, `role: admin|user`)
+}

@@ -15,7 +15,7 @@ As a library, you can run the LSP server in various modes:
 ### Stdio
 Suitable for integration with most editors (VS Code, Vim, etc.).
 ```go
-import "github.com/theirish81/fml/lsp"
+import "github.com/fragshq/fml/lsp"
 
 // ...
 err := lsp.RunStdio(context.Background())
@@ -35,4 +35,4 @@ err := lsp.RunWS(context.Background(), ":7101")
 
 ## Dependencies
 - `github.com/owenrumney/go-lsp`: LSP 3.17 implementation.
-- `github.com/theirish81/fml`: The core FML parser and compiler.
+- `github.com/fragshq/fml`: The core FML parser and compiler.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/theirish81/fml/parser"
+	"github.com/fragshq/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

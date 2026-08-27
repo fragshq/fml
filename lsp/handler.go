@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/fragshq/fml/parser"
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
-	"github.com/theirish81/fml/parser"
 )
 
 type FMLHandler struct {

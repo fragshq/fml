@@ -1,4 +1,4 @@
-module github.com/theirish81/fml
+module github.com/fragshq/fml
 
 go 1.25.4
 

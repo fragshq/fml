@@ -3,9 +3,9 @@ package decompiler
 import (
 	"testing"
 
+	"github.com/fragshq/fml/compiler"
+	"github.com/fragshq/fml/parser"
 	"github.com/stretchr/testify/assert"
-	"github.com/theirish81/fml/compiler"
-	"github.com/theirish81/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

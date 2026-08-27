@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/fragshq/fml/parser"
 	"github.com/owenrumney/go-lsp/lsp"
-	"github.com/theirish81/fml/parser"
 )
 
 type semanticToken struct {

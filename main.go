@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/fragshq/fml/compiler"
+	"github.com/fragshq/fml/decompiler"
+	"github.com/fragshq/fml/parser"
 	"github.com/spf13/cobra"
-	"github.com/theirish81/fml/compiler"
-	"github.com/theirish81/fml/decompiler"
-	"github.com/theirish81/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

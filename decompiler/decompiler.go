@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/theirish81/fml/compiler"
-	"github.com/theirish81/fml/parser"
+	"github.com/fragshq/fml/compiler"
+	"github.com/fragshq/fml/parser"
 	"gopkg.in/yaml.v3"
 )
 

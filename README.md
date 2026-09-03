@@ -91,6 +91,11 @@ For integration details, see [lsp/README.md](lsp/README.md).
 - `lsp/`: Language Server Protocol library.
 - `main.go`: CLI entry point.
 
+
+## Documentation
+
+Explore the full [FML Documentation in the Wiki](https://github.com/fragshq/fml/wiki)
+
 ## License
 
 MIT

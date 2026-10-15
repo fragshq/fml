@@ -133,11 +133,14 @@ func (h *FMLHandler) OnTypeFormatting(ctx context.Context, params *lsp.DocumentO
 		}
 	}
 
+	curLine := lines[params.Position.Line]
+	leading := len(curLine) - len(strings.TrimLeft(curLine, " \t"))
+
 	return []lsp.TextEdit{
 		{
 			Range: lsp.Range{
 				Start: lsp.Position{Line: params.Position.Line, Character: 0},
-				End:   lsp.Position{Line: params.Position.Line, Character: params.Position.Character},
+				End:   lsp.Position{Line: params.Position.Line, Character: leading},
 			},
 			NewText: newIndent,
 		},

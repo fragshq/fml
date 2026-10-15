@@ -102,6 +102,38 @@ func TestFMLHandler_OnTypeFormatting(t *testing.T) {
 			},
 		},
 		{
+			name:    "keep text before the caret (trigger after a paste ending in })",
+			content: "session(\"s\") {\n  step a {\n    x: 1\n  }\n}",
+			line:    4,
+			char:    1,
+			ch:      "\n",
+			expected: []lsp.TextEdit{
+				{
+					Range: lsp.Range{
+						Start: lsp.Position{Line: 4, Character: 0},
+						End:   lsp.Position{Line: 4, Character: 0},
+					},
+					NewText: "  ",
+				},
+			},
+		},
+		{
+			name:    "reindent a line split by Enter without touching its text",
+			content: "session(\"s\") {\n      use search",
+			line:    1,
+			char:    0,
+			ch:      "\n",
+			expected: []lsp.TextEdit{
+				{
+					Range: lsp.Range{
+						Start: lsp.Position{Line: 1, Character: 0},
+						End:   lsp.Position{Line: 1, Character: 6},
+					},
+					NewText: "  ",
+				},
+			},
+		},
+		{
 			name:    "preserve indentation on regular lines",
 			content: "session(\"s\") {\n  use search\n",
 			line:    2,
